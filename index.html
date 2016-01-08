@@ -1,0 +1,332 @@
+﻿<!DOCTYPE html>
+<html>
+    <head>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+
+        <title>Babylon.js sample code</title>
+        <!-- Babylon.js -->
+        <script src="http://www.babylonjs.com/hand.minified-1.2.js"></script>
+        <script src="http://www.babylonjs.com/cannon.js"></script>
+        <script src="http://www.babylonjs.com/oimo.js"></script>
+        <script src="http://www.babylonjs.com/babylon.js"></script>
+        <script src="./eventHandlers.js"></script>
+        <style>
+            html, body {
+                overflow: hidden;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
+            }
+
+            #renderCanvas {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
+        </style>
+    </head>
+<body>
+    <canvas id="renderCanvas"></canvas>
+    <script>
+
+        var canvas = document.getElementById("renderCanvas");
+        window.engine = new BABYLON.Engine(canvas, true);
+
+        var game = {
+            selectedElement : null,
+            selectionStartPosition : null,
+            selectionEndPosition : null,
+            selectionInProgress : false,
+            rubberBand : null
+        };
+
+        function createScene() {
+            var scene = new BABYLON.Scene(engine);
+        
+            var lights = createLights(scene);
+        	var materials = createMaterials(scene);
+
+            window.camera = new BABYLON.FreeCamera("Camera", new BABYLON.Vector3(0, 400, -200), scene);
+            camera.rotation.y = 0; // look straigt forward
+            camera.rotation.x = 0.3 * Math.PI; // look slight down
+            
+            // =====
+            // Meshes
+            // =====
+
+            // Boxes
+        	var boxes = [];
+            for (var i = 0; i < 10; i++) {
+                var box = BABYLON.Mesh.CreateBox("Box", 10, scene);
+                box.material = materials.yellowMaterial;
+                box.position = new BABYLON.Vector3(-i * 50, 5, 0);
+                boxes.push(box);
+            }
+        
+        	// Ground
+        	var ground = BABYLON.Mesh.CreateGround("Ground", 1000, 1000, 1, scene, true);
+        	ground.material = materials.groundMaterial;
+        	
+            // =====
+        	// Shadow
+            // =====
+        	var shadowGenerator = new BABYLON.ShadowGenerator(2048, lights.sun);
+        	for (var index in boxes) {
+        		shadowGenerator.getShadowMap().renderList.push(boxes[index]);	
+        	}
+        	shadowGenerator.useVarianceShadowMap = true;
+        	ground.receiveShadows = true;
+        	
+            scene.registerBeforeRender(function () {
+        		// ...
+            });
+        	
+            // =====
+            // Event handling
+            // =====
+
+            var eventHandlers = createEventHandlers();
+        	
+        	document.removeEventListener("keydown");
+        	document.addEventListener("keydown", eventHandlers.onKeyDown, false);
+        	canvas.addEventListener("pointerdown", eventHandlers.onPointerDown);
+        	canvas.addEventListener("pointerup", eventHandlers.onPointerUp);
+        	
+            disableDefaultRightClickMenu();
+        	
+            // =====
+        	// Helper functions
+            // =====
+
+        	function setSelectionRingUnderMesh(selectionRing, mesh) {
+        	    selectionRing.visibility = 1;
+        	    selectionRing.position = new BABYLON.Vector3(0, 0, 0);
+        	    selectionRing.parent = mesh;
+        	    selectionRing.position.y = getHeightOfMesh(mesh) / 2 * -1 + 0.1;
+        	}
+
+        	function setRubberBand(startPos, endPos) {
+        	    if (game.rubberBand) {
+        	        game.rubberBand.dispose();
+        	    }
+        	    var startPick = scene.pick(startPos.x, startPos.y, function (mesh) { return mesh == ground; });
+        	    var endPick = scene.pick(endPos.x, endPos.y, function (mesh) { return mesh == ground; });
+        	    if (!startPick.hit || !endPick.hit) {
+        	        return;
+        	    }
+        	    var startPosOnFloor = startPick.pickedPoint;
+        	    var endPosOnFloor = endPick.pickedPoint;
+        	    console.log("setting rubberBand", startPos, endPos, startPosOnFloor, endPosOnFloor);
+        	    game.rubberBand = new BABYLON.MeshBuilder.CreateBox("rubberBand", { height: 100, width: endPosOnFloor.x - startPosOnFloor.x, depth: endPosOnFloor.z - startPosOnFloor.z, updateable: true }, scene);
+        	    game.rubberBand.material = selectionMaterial;
+        	    game.rubberBand.position = new BABYLON.Vector3(startPosOnFloor.x + (endPosOnFloor.x - startPosOnFloor.x) / 2, 50, startPosOnFloor.z + (endPosOnFloor.z - startPosOnFloor.z) / 2);
+        	    window.band = game.rubberBand;
+        	}
+
+        	function deselectAllMeshes() {
+        	    for (var index in boxes) {
+        	        boxes[index].material = yellowMaterial;
+        	    }
+        	}
+
+        	function getMeshesSelectedByRubberBand() {
+        	    var meshes = [];
+        	    for (var index in boxes) {
+        	        var box = boxes[index];
+        	        if (game.rubberBand.intersectsPoint(box.position)) {
+        	            meshes.push(box);
+        	        }
+        	    }
+        	    return meshes;
+        	}
+        	
+        	function getBottomPositionOfMesh(mesh) {
+        		var pos = mesh.position.clone();
+        		var minimumPos = mesh.getBoundingInfo().boundingBox.minimumWorld;
+        		pos.y = minimumPos.y;
+        		return pos;
+        	}
+
+        	function getWidthXOfMesh(mesh) {
+        	    return mesh.getBoundingInfo().boundingBox.maximumWorld.x - mesh.getBoundingInfo().boundingBox.minimumWorld.x;
+        	}
+
+        	function getWidthZOfMesh(mesh) {
+        	    return mesh.getBoundingInfo().boundingBox.maximumWorld.z - mesh.getBoundingInfo().boundingBox.minimumWorld.z;
+        	}
+
+        	function getHeightOfMesh(mesh) {
+        	    return mesh.getBoundingInfo().boundingBox.maximumWorld.y - mesh.getBoundingInfo().boundingBox.minimumWorld.y;
+        	}
+
+        	function isLeftClick(evt) {
+        	    return evt.button == 0;
+        	}
+
+        	function isRightClick(evt) {
+        	    return evt.button == 2;
+        	}
+
+        	function moveMeshTo(mesh, pos) {
+        	    if (mesh.animations.length) {
+        	        scene.getAnimatableByTarget(mesh).stop();
+        	    }
+
+        	    var path = pos.subtract(mesh.position);
+        	    var length = Math.round(path.length());
+        	    var framesCount = length / 2;
+
+        	    var currentAnimation = new BABYLON.Animation("animation", "position", 60, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
+        	    var animationFrames = [];
+        	    animationFrames.push({
+        	        frame: 0,
+        	        value: mesh.position
+        	    });
+        	    animationFrames.push({
+        	        frame: framesCount,
+        	        value: pos
+        	    });
+        	    currentAnimation.setKeys(animationFrames);
+        	    mesh.animations.push(currentAnimation);
+        	    scene.beginAnimation(mesh, 0, framesCount, true);
+        	    console.log("animating", mesh, "to", pos);
+        	}
+
+            function createMaterials(scene) {
+                var materials = {};
+
+                // Selected ring material
+                materials.selectedRingMaterial = createSelectedRingMaterial(scene);
+                
+                // Yellow material
+                materials.yellowMaterial = new BABYLON.StandardMaterial("yellow", scene);
+                materials.yellowMaterial.diffuseColor = new BABYLON.Color3(1, 1, 0);
+
+                // Ground material
+                materials.groundMaterial  = new BABYLON.StandardMaterial("ground", scene);
+                materials.yellowMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+
+                return materials;
+            }
+
+            function createSelectedRingMaterial(scene) {
+                var selectTexture = new BABYLON.DynamicTexture("selectTexture", 512, scene, true);
+                // draw circle using 2d context
+                var context = selectTexture._context;
+                var invertY = true;
+                var size = selectTexture.getSize();
+                var posX = 256;
+                var posY = 256;
+                var radius = 220;
+                context.arc(posX, posY, radius, 0, 2 * Math.PI, false);
+                //context.fillStyle = 'rgba(0, 100, 0, 0.5)';
+                //context.fill();
+                context.lineWidth = 30;
+                context.strokeStyle = 'rgb(0, 255, 0)';;
+                context.stroke();
+                selectTexture.update(invertY);
+                // create and return actual material
+                var selectMaterial = new BABYLON.StandardMaterial('selectedBoxMaterial', scene);
+                selectMaterial.diffuseTexture = selectTexture;
+                selectMaterial.opacityTexture = selectTexture;
+                return selectMaterial;
+            }
+
+            function createLights(scene) {
+                var lights = {};
+                
+                lights.sun = new BABYLON.DirectionalLight("Sun", new BABYLON.Vector3(-1.5, -2, -1), scene);
+                
+                lights.atmospheric = new BABYLON.HemisphericLight("atmospheric", new BABYLON.Vector3(-1.5, 2, -1), scene);
+                lights.atmospheric.diffuse = new BABYLON.Color3(1, 1, 1);
+                lights.atmospheric.specular = new BABYLON.Color3(1, 1, 1);
+                lights.atmospheric.groundColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+                lights.atmospheric.intensity = 0.4;
+
+                return lights;
+            }
+
+            function createEventHandlers() {
+                var eventHandlers = {};
+
+                eventHandlers.onKeyDown = onKeyDown;
+                eventHandlers.onPointerDown = onKeyDown;
+                eventHandlers.onPointerUp = onKeyDown;
+
+                return eventHandlers;
+            }
+
+            // Handle camera movements with keyboard
+            function onKeyDown(evt) {
+                var key = String.fromCharCode(evt.keyCode);
+                if (key == 'W') {
+                    camera.cameraDirection.z += 10;
+                }
+                if (key == 'S') {
+                    camera.cameraDirection.z -= 10;
+                }
+                if (key == 'D') {
+                    camera.cameraDirection.x += 10;
+                }
+                if (key == 'A') {
+                    camera.cameraDirection.x -= 10;
+                }
+                evt.stopPropagation();
+            }
+
+            // Handle click events
+            function onPointerDown(evt) {
+                if (isLeftClick(evt)) {
+                    game.selectionStartPosition = { x: scene.pointerX, y: scene.pointerY };
+                    var pickInfo = scene.pick(scene.pointerX, scene.pointerY, function (mesh) { return mesh !== ground; });
+                    if (pickInfo.hit) {
+                        var currentMesh = pickInfo.pickedMesh;
+                        game.selectedElement = currentMesh;
+                        setSelectionRingUnderMesh(selectionRing, currentMesh);
+                    }
+                } else if (isRightClick(evt)) {
+                    var pickInfo = scene.pick(scene.pointerX, scene.pointerY, function (mesh) { return mesh == ground; });
+                    if (pickInfo.hit) {
+                        var targetPos = pickInfo.pickedPoint;
+                        targetPos.y = game.selectedElement.position.y;
+                        moveMeshTo(game.selectedElement, targetPos);
+                    }
+                }
+                evt.stopPropagation();
+                evt.preventDefault();
+                return false;
+            }
+
+            function onPointerUp(evt) {
+                game.selectionEndPosition = { x: scene.pointerX, y: scene.pointerY };
+                setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
+                deselectAllMeshes();
+                var meshes = getMeshesSelectedByRubberBand();
+                for (var index in meshes) {
+                    meshes[index].material = selectionMaterial;
+                }
+            }
+
+            function disableDefaultRightClickMenu() {
+                document.addEventListener("contextmenu", function (evt) { evt.preventDefault(); });
+            }
+        
+            return scene;
+        	
+        };
+        
+        
+        var scene = createScene();
+
+        engine.runRenderLoop(function () {
+            scene.render();
+        });
+
+        // Resize
+        window.addEventListener("resize", function () {
+            engine.resize();
+        });
+    </script>
+</body>
+</html>
