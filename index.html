@@ -34,7 +34,7 @@
         window.engine = new BABYLON.Engine(canvas, true);
 
         var game = {
-            selectedElement : null,
+            selectedElements : [],
             selectionStartPosition : null,
             selectionEndPosition : null,
             selectionInProgress : false,
@@ -45,7 +45,7 @@
             var scene = new BABYLON.Scene(engine);
         
             var lights = createLights(scene);
-        	var materials = createMaterials(scene);
+            var materials = createMaterials(scene);
 
             window.camera = new BABYLON.FreeCamera("Camera", new BABYLON.Vector3(0, 400, -200), scene);
             camera.rotation.y = 0; // look straigt forward
@@ -59,7 +59,7 @@
         	var boxes = [];
             for (var i = 0; i < 10; i++) {
                 var box = BABYLON.Mesh.CreateBox("Box", 10, scene);
-                box.material = materials.yellowMaterial;
+                box.material = box.originalMaterial = materials.yellowMaterial;
                 box.position = new BABYLON.Vector3(-i * 50, 5, 0);
                 boxes.push(box);
             }
@@ -71,6 +71,7 @@
             // =====
         	// Shadow
             // =====
+
         	var shadowGenerator = new BABYLON.ShadowGenerator(2048, lights.sun);
         	for (var index in boxes) {
         		shadowGenerator.getShadowMap().renderList.push(boxes[index]);	
@@ -126,12 +127,16 @@
 
         	function deselectAllMeshes() {
         	    for (var index in boxes) {
-        	        boxes[index].material = yellowMaterial;
+        	        boxes[index].material = boxes[index].originalMaterial;
+        	        if (boxes[index].selectionCircle) {
+        	            boxes[index].selectionCircle.dispose();
+        	        }
         	    }
         	}
 
         	function getMeshesSelectedByRubberBand() {
         	    var meshes = [];
+        	    scene.render();
         	    for (var index in boxes) {
         	        var box = boxes[index];
         	        if (game.rubberBand.intersectsPoint(box.position)) {
@@ -205,7 +210,7 @@
 
                 // Ground material
                 materials.groundMaterial  = new BABYLON.StandardMaterial("ground", scene);
-                materials.yellowMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+                materials.groundMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
 
                 return materials;
             }
@@ -220,10 +225,10 @@
                 var posY = 256;
                 var radius = 220;
                 context.arc(posX, posY, radius, 0, 2 * Math.PI, false);
-                //context.fillStyle = 'rgba(0, 100, 0, 0.5)';
-                //context.fill();
+                context.fillStyle = 'rgba(255, 255, 255, 0)';
+                context.fill();
                 context.lineWidth = 30;
-                context.strokeStyle = 'rgb(0, 255, 0)';;
+                context.strokeStyle = 'rgb(0, 255, 0)';
                 context.stroke();
                 selectTexture.update(invertY);
                 // create and return actual material
@@ -251,8 +256,8 @@
                 var eventHandlers = {};
 
                 eventHandlers.onKeyDown = onKeyDown;
-                eventHandlers.onPointerDown = onKeyDown;
-                eventHandlers.onPointerUp = onKeyDown;
+                eventHandlers.onPointerDown = onPointerDown;
+                eventHandlers.onPointerUp = onPointerUp;
 
                 return eventHandlers;
             }
@@ -279,12 +284,6 @@
             function onPointerDown(evt) {
                 if (isLeftClick(evt)) {
                     game.selectionStartPosition = { x: scene.pointerX, y: scene.pointerY };
-                    var pickInfo = scene.pick(scene.pointerX, scene.pointerY, function (mesh) { return mesh !== ground; });
-                    if (pickInfo.hit) {
-                        var currentMesh = pickInfo.pickedMesh;
-                        game.selectedElement = currentMesh;
-                        setSelectionRingUnderMesh(selectionRing, currentMesh);
-                    }
                 } else if (isRightClick(evt)) {
                     var pickInfo = scene.pick(scene.pointerX, scene.pointerY, function (mesh) { return mesh == ground; });
                     if (pickInfo.hit) {
@@ -300,16 +299,46 @@
 
             function onPointerUp(evt) {
                 game.selectionEndPosition = { x: scene.pointerX, y: scene.pointerY };
-                setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
                 deselectAllMeshes();
-                var meshes = getMeshesSelectedByRubberBand();
-                for (var index in meshes) {
-                    meshes[index].material = selectionMaterial;
+                if (!isMouseMovedDuringSelection(game.selectionStartPosition, game.selectionEndPosition)) {
+                    // Single selection
+                    var pickInfo = scene.pick(scene.pointerX, scene.pointerY, function (mesh) { return mesh !== ground; });
+                    if (pickInfo.hit) {
+                        var currentMesh = pickInfo.pickedMesh;
+                        game.selectedElements = [currentMesh];
+                        console.log("single selection", game.selectedElements);
+                        selectMeshes(game.selectedElements, scene);
+                    }
+                } else {
+                    // Multi selection
+                    game.selectedElements = getMeshesSelectedByRubberBand();
+                    console.log("multi selection", game.selectedElements);
+                    selectMeshes(game.selectedElements, scene);
+                    setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
                 }
+            }
+
+            function selectMeshes(meshes, scene) {
+                for (var index in meshes) {
+                    selectMesh(meshes[index], scene); 
+                }
+            }
+
+            function selectMesh(mesh, scene) {
+                mesh.selectionCircle = BABYLON.Mesh.CreateDisc('selectionCircle', 15, 32, scene);
+                mesh.selectionCircle.material = materials.selectedRingMaterial;;
+                mesh.selectionCircle.parent = mesh;
+                mesh.selectionCircle.position.y = 0.1;
+                mesh.selectionCircle.rotation.x = Math.PI / 2;
+                mesh.selectionCircle.receiveShadows = true;
             }
 
             function disableDefaultRightClickMenu() {
                 document.addEventListener("contextmenu", function (evt) { evt.preventDefault(); });
+            }
+
+            function isMouseMovedDuringSelection(startPos, endPos) {
+                return startPos.x != endPos.x || startPos.y != endPos.y;
             }
         
             return scene;
