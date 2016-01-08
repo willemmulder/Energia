@@ -24,6 +24,12 @@
                 height: 100%;
                 touch-action: none;
             }
+
+            #renderCanvas2D {
+                width: 100%;
+                height: 100%;
+                touch-action: none;
+            }
         </style>
     </head>
 <body>
@@ -31,6 +37,8 @@
     <script>
 
         var canvas = document.getElementById("renderCanvas");
+        var canvas2D = document.getElementById("renderCanvas");
+
         window.engine = new BABYLON.Engine(canvas, true);
 
         var game = {
@@ -38,7 +46,8 @@
             selectionStartPosition : null,
             selectionEndPosition : null,
             selectionInProgress : false,
-            rubberBand : null
+            rubberBand: null,
+            rubberBandSelectionMesh : null
         };
 
         function createScene() {
@@ -91,8 +100,9 @@
         	
         	document.removeEventListener("keydown");
         	document.addEventListener("keydown", eventHandlers.onKeyDown, false);
-        	canvas.addEventListener("pointerdown", eventHandlers.onPointerDown);
-        	canvas.addEventListener("pointerup", eventHandlers.onPointerUp);
+        	canvas2D.addEventListener("pointerdown", eventHandlers.onPointerDown);
+        	canvas2D.addEventListener("pointermove", eventHandlers.onPointerMove);
+        	canvas2D.addEventListener("pointerup", eventHandlers.onPointerUp);
         	
             disableDefaultRightClickMenu();
         	
@@ -100,17 +110,7 @@
         	// Helper functions
             // =====
 
-        	function setSelectionRingUnderMesh(selectionRing, mesh) {
-        	    selectionRing.visibility = 1;
-        	    selectionRing.position = new BABYLON.Vector3(0, 0, 0);
-        	    selectionRing.parent = mesh;
-        	    selectionRing.position.y = getHeightOfMesh(mesh) / 2 * -1 + 0.1;
-        	}
-
         	function setRubberBand(startPos, endPos) {
-        	    if (game.rubberBand) {
-        	        game.rubberBand.dispose();
-        	    }
         	    var startPick = scene.pick(startPos.x, startPos.y, function (mesh) { return mesh == ground; });
         	    var endPick = scene.pick(endPos.x, endPos.y, function (mesh) { return mesh == ground; });
         	    if (!startPick.hit || !endPick.hit) {
@@ -118,11 +118,10 @@
         	    }
         	    var startPosOnFloor = startPick.pickedPoint;
         	    var endPosOnFloor = endPick.pickedPoint;
-        	    console.log("setting rubberBand", startPos, endPos, startPosOnFloor, endPosOnFloor);
-        	    game.rubberBand = new BABYLON.MeshBuilder.CreateBox("rubberBand", { height: 100, width: endPosOnFloor.x - startPosOnFloor.x, depth: endPosOnFloor.z - startPosOnFloor.z, updateable: true }, scene);
-        	    game.rubberBand.material = selectionMaterial;
-        	    game.rubberBand.position = new BABYLON.Vector3(startPosOnFloor.x + (endPosOnFloor.x - startPosOnFloor.x) / 2, 50, startPosOnFloor.z + (endPosOnFloor.z - startPosOnFloor.z) / 2);
-        	    window.band = game.rubberBand;
+        	    game.rubberBandSelectionMesh = new BABYLON.MeshBuilder.CreateBox("rubberBand", { height: 100, width: endPosOnFloor.x - startPosOnFloor.x, depth: endPosOnFloor.z - startPosOnFloor.z, updateable: true }, scene);
+        	    game.rubberBandSelectionMesh.position = new BABYLON.Vector3(startPosOnFloor.x + (endPosOnFloor.x - startPosOnFloor.x) / 2, 50, startPosOnFloor.z + (endPosOnFloor.z - startPosOnFloor.z) / 2);
+        	    game.rubberBandSelectionMesh.visibility = false;
+                // TODO: draw 2d image on canvas2D
         	}
 
         	function deselectAllMeshes() {
@@ -139,7 +138,7 @@
         	    scene.render();
         	    for (var index in boxes) {
         	        var box = boxes[index];
-        	        if (game.rubberBand.intersectsPoint(box.position)) {
+        	        if (game.rubberBandSelectionMesh.intersectsPoint(box.position)) {
         	            meshes.push(box);
         	        }
         	    }
@@ -257,6 +256,7 @@
 
                 eventHandlers.onKeyDown = onKeyDown;
                 eventHandlers.onPointerDown = onPointerDown;
+                eventHandlers.onPointerMove = onPointerMove;
                 eventHandlers.onPointerUp = onPointerUp;
 
                 return eventHandlers;
@@ -297,6 +297,12 @@
                 return false;
             }
 
+            function onPointerMove(evt) {
+                if (game.selectionStartPosition) {
+
+                }
+            }
+
             function onPointerUp(evt) {
                 game.selectionEndPosition = { x: scene.pointerX, y: scene.pointerY };
                 deselectAllMeshes();
@@ -311,11 +317,13 @@
                     }
                 } else {
                     // Multi selection
+                    setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
                     game.selectedElements = getMeshesSelectedByRubberBand();
                     console.log("multi selection", game.selectedElements);
                     selectMeshes(game.selectedElements, scene);
-                    setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
                 }
+                game.selectionStartPosition = null;
+                game.selectionEndPosition = null;
             }
 
             function selectMeshes(meshes, scene) {
