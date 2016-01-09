@@ -10,6 +10,7 @@
         <script src="http://www.babylonjs.com/oimo.js"></script>
         <script src="http://www.babylonjs.com/babylon.js"></script>
         <script src="./eventHandlers.js"></script>
+        <script src="./libs/pixi.js"></script>
         <style>
             html, body {
                 overflow: hidden;
@@ -19,21 +20,21 @@
                 padding: 0;
             }
 
-            #renderCanvas {
+            #renderCanvasBottom, #renderCanvasTop {
+                position: absolute;
                 width: 100%;
                 height: 100%;
                 touch-action: none;
             }
 
-            #renderCanvas2D {
-                width: 100%;
-                height: 100%;
-                touch-action: none;
+            #renderCanvasTop {
+                z-index: 2;
             }
         </style>
     </head>
 <body>
-    <canvas id="renderCanvas"></canvas>
+    <canvas id="renderCanvasBottom"></canvas>
+    <canvas id="renderCanvasTop"></canvas>
     <script>
 
         // =====
@@ -42,10 +43,17 @@
         // 
         // =====
 
-        var canvas = document.getElementById("renderCanvas");
-        var canvas2D = document.getElementById("renderCanvas");
+        var canvas = document.getElementById("renderCanvasBottom");
+        window.babylon = new BABYLON.Engine(canvas, true);
+        window.scene = new BABYLON.Scene(babylon);
 
-        window.engine = new BABYLON.Engine(canvas, true);
+        var canvas2D = document.getElementById("renderCanvasTop");
+        window.pixi = new PIXI.WebGLRenderer(canvas2D.clientWidth, canvas2D.clientHeight, { view: canvas2D, transparent: true });
+        window.scene2D = new PIXI.Container();
+        window.graphics2D = new PIXI.Graphics();
+        window.graphics2D.fillStyle = 'rgba(0, 0, 0, 1)';
+        window.graphics2D.clear();
+        window.scene2D.addChild(window.graphics2D);
 
         var game = {
             selectedElements : [],
@@ -54,13 +62,13 @@
             selectionInProgress : false,
             rubberBand: null,
             rubberBandSelectionMesh: null,
+            rubberBandSelectionSquare: null,
             meshTemplates: {
 
             }
         };
 
         function createScene() {
-            var scene = new BABYLON.Scene(engine);
         
             var lights = createLights(scene);
             var materials = createMaterials(scene);
@@ -78,6 +86,7 @@
             game.meshTemplates.unit = unitTemplate = BABYLON.Mesh.CreateBox("UnitTemplate", 10, scene);
             unitTemplate.material = unitTemplate.originalMaterial = materials.yellowMaterial;
             unitTemplate.visibility = false;
+            unitTemplate.selectable = true;
 
             var selectionRingTemplate;
             game.meshTemplates.selectionRing = selectionRingTemplate = BABYLON.Mesh.CreateDisc('selectionRing', 15, 32, scene);
@@ -86,6 +95,7 @@
             selectionRingTemplate.rotation.x = Math.PI / 2;
             selectionRingTemplate.receiveShadows = true;
             selectionRingTemplate.visibility = false;
+            selectionRingTemplate.selectable = false;
 
             // units
         	var units = [];
@@ -99,6 +109,7 @@
         	// Ground
         	var ground = BABYLON.Mesh.CreateGround("Ground", 1000, 1000, 1, scene, true);
         	ground.material = materials.groundMaterial;
+        	ground.selectable = false;
         	
             // =====
         	// Shadow
@@ -210,7 +221,7 @@
 
             function onPointerDown(evt) {
                 if (isLeftClick(evt)) {
-                    game.selectionStartPosition = { x: scene.pointerX, y: scene.pointerY };
+                    game.selectionStartPosition = { x: evt.clientX, y: evt.clientY };
                 } else if (isRightClick(evt)) {
                     var pickInfo = scene.pick(scene.pointerX, scene.pointerY, function (mesh) { return mesh == ground; });
                     if (pickInfo.hit) {
@@ -226,27 +237,26 @@
 
             function onPointerMove(evt) {
                 if (game.selectionStartPosition) {
-
+                    drawSelectionSquare(game.selectionStartPosition, { x: evt.clientX, y: evt.clientY });
                 }
             }
 
             function onPointerUp(evt) {
-                game.selectionEndPosition = { x: scene.pointerX, y: scene.pointerY };
+                game.selectionEndPosition = { x: evt.clientX, y: evt.clientY };
                 deselectAllMeshes(units);
+                clearSelectionSquare();
                 if (!isMouseMovedDuringSelection(game.selectionStartPosition, game.selectionEndPosition)) {
                     // Single selection
-                    var pickInfo = scene.pick(scene.pointerX, scene.pointerY, function (mesh) { return mesh !== ground; });
+                    var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh.selectable; });
                     if (pickInfo.hit) {
                         var currentMesh = pickInfo.pickedMesh;
                         game.selectedElements = [currentMesh];
-                        console.log("single selection", game.selectedElements);
                         selectMeshes(game.selectedElements, scene);
                     }
                 } else {
                     // Multi selection
                     setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
                     game.selectedElements = getMeshesSelectedByRubberBand(scene, units, game.rubberBandSelectionMesh);
-                    console.log("multi selection", game.selectedElements);
                     selectMeshes(game.selectedElements, scene);
                 }
                 game.selectionStartPosition = null;
@@ -257,16 +267,22 @@
         	
         };
         
-        
         var scene = createScene();
 
-        engine.runRenderLoop(function () {
+        babylon.runRenderLoop(function () {
             scene.render();
         });
 
+        requestAnimationFrame(pixiAnimate);
+        function pixiAnimate() {
+            requestAnimationFrame(pixiAnimate);
+            pixi.render(scene2D);
+        }
+
         // Resize
         window.addEventListener("resize", function () {
-            engine.resize();
+            babylon.resize();
+            pixi.resize();
         });
 
         // =====
@@ -403,6 +419,16 @@
             mesh.selectionRing = game.meshTemplates.selectionRing.clone("selectionRing");
             mesh.selectionRing.parent = mesh;
             mesh.selectionRing.visibility = true;
+        }
+
+        function drawSelectionSquare(startPos, endPos) {
+            graphics2D.clear();
+            graphics2D.lineStyle(2, 0x00FF00, 1);
+            graphics2D.drawRect(startPos.x, startPos.y, (endPos.x - startPos.x), (endPos.y - startPos.y));
+        }
+
+        function clearSelectionSquare() {
+            graphics2D.clear();
         }
 
         // =====
