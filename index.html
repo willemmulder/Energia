@@ -36,6 +36,12 @@
     <canvas id="renderCanvas"></canvas>
     <script>
 
+        // =====
+        // 
+        // MAIN
+        // 
+        // =====
+
         var canvas = document.getElementById("renderCanvas");
         var canvas2D = document.getElementById("renderCanvas");
 
@@ -47,7 +53,10 @@
             selectionEndPosition : null,
             selectionInProgress : false,
             rubberBand: null,
-            rubberBandSelectionMesh : null
+            rubberBandSelectionMesh: null,
+            meshTemplates: {
+
+            }
         };
 
         function createScene() {
@@ -64,13 +73,27 @@
             // Meshes
             // =====
 
-            // Boxes
-        	var boxes = [];
+            // Templates
+            var unitTemplate;
+            game.meshTemplates.unit = unitTemplate = BABYLON.Mesh.CreateBox("UnitTemplate", 10, scene);
+            unitTemplate.material = unitTemplate.originalMaterial = materials.yellowMaterial;
+            unitTemplate.visibility = false;
+
+            var selectionRingTemplate;
+            game.meshTemplates.selectionRing = selectionRingTemplate = BABYLON.Mesh.CreateDisc('selectionRing', 15, 32, scene);
+            selectionRingTemplate.material = materials.selectionRingMaterial;;
+            selectionRingTemplate.position.y = 0.1;
+            selectionRingTemplate.rotation.x = Math.PI / 2;
+            selectionRingTemplate.receiveShadows = true;
+            selectionRingTemplate.visibility = false;
+
+            // units
+        	var units = [];
             for (var i = 0; i < 10; i++) {
-                var box = BABYLON.Mesh.CreateBox("Box", 10, scene);
-                box.material = box.originalMaterial = materials.yellowMaterial;
-                box.position = new BABYLON.Vector3(-i * 50, 5, 0);
-                boxes.push(box);
+                var unit = game.meshTemplates.unit.clone("unit");
+                unit.visibility = true;
+                unit.position = new BABYLON.Vector3(-i * 50, 5, 0);
+                units.push(unit);
             }
         
         	// Ground
@@ -82,8 +105,8 @@
             // =====
 
         	var shadowGenerator = new BABYLON.ShadowGenerator(2048, lights.sun);
-        	for (var index in boxes) {
-        		shadowGenerator.getShadowMap().renderList.push(boxes[index]);	
+        	for (var index in units) {
+        		shadowGenerator.getShadowMap().renderList.push(units[index]);	
         	}
         	shadowGenerator.useVarianceShadowMap = true;
         	ground.receiveShadows = true;
@@ -105,9 +128,11 @@
         	canvas2D.addEventListener("pointerup", eventHandlers.onPointerUp);
         	
             disableDefaultRightClickMenu();
-        	
+
             // =====
-        	// Helper functions
+            // 
+            // HELPER FUNCTIONS
+            // 
             // =====
 
         	function setRubberBand(startPos, endPos) {
@@ -124,53 +149,7 @@
                 // TODO: draw 2d image on canvas2D
         	}
 
-        	function deselectAllMeshes() {
-        	    for (var index in boxes) {
-        	        boxes[index].material = boxes[index].originalMaterial;
-        	        if (boxes[index].selectionCircle) {
-        	            boxes[index].selectionCircle.dispose();
-        	        }
-        	    }
-        	}
-
-        	function getMeshesSelectedByRubberBand() {
-        	    var meshes = [];
-        	    scene.render();
-        	    for (var index in boxes) {
-        	        var box = boxes[index];
-        	        if (game.rubberBandSelectionMesh.intersectsPoint(box.position)) {
-        	            meshes.push(box);
-        	        }
-        	    }
-        	    return meshes;
-        	}
         	
-        	function getBottomPositionOfMesh(mesh) {
-        		var pos = mesh.position.clone();
-        		var minimumPos = mesh.getBoundingInfo().boundingBox.minimumWorld;
-        		pos.y = minimumPos.y;
-        		return pos;
-        	}
-
-        	function getWidthXOfMesh(mesh) {
-        	    return mesh.getBoundingInfo().boundingBox.maximumWorld.x - mesh.getBoundingInfo().boundingBox.minimumWorld.x;
-        	}
-
-        	function getWidthZOfMesh(mesh) {
-        	    return mesh.getBoundingInfo().boundingBox.maximumWorld.z - mesh.getBoundingInfo().boundingBox.minimumWorld.z;
-        	}
-
-        	function getHeightOfMesh(mesh) {
-        	    return mesh.getBoundingInfo().boundingBox.maximumWorld.y - mesh.getBoundingInfo().boundingBox.minimumWorld.y;
-        	}
-
-        	function isLeftClick(evt) {
-        	    return evt.button == 0;
-        	}
-
-        	function isRightClick(evt) {
-        	    return evt.button == 2;
-        	}
 
         	function moveMeshTo(mesh, pos) {
         	    if (mesh.animations.length) {
@@ -197,59 +176,9 @@
         	    console.log("animating", mesh, "to", pos);
         	}
 
-            function createMaterials(scene) {
-                var materials = {};
-
-                // Selected ring material
-                materials.selectedRingMaterial = createSelectedRingMaterial(scene);
-                
-                // Yellow material
-                materials.yellowMaterial = new BABYLON.StandardMaterial("yellow", scene);
-                materials.yellowMaterial.diffuseColor = new BABYLON.Color3(1, 1, 0);
-
-                // Ground material
-                materials.groundMaterial  = new BABYLON.StandardMaterial("ground", scene);
-                materials.groundMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
-
-                return materials;
-            }
-
-            function createSelectedRingMaterial(scene) {
-                var selectTexture = new BABYLON.DynamicTexture("selectTexture", 512, scene, true);
-                // draw circle using 2d context
-                var context = selectTexture._context;
-                var invertY = true;
-                var size = selectTexture.getSize();
-                var posX = 256;
-                var posY = 256;
-                var radius = 220;
-                context.arc(posX, posY, radius, 0, 2 * Math.PI, false);
-                context.fillStyle = 'rgba(255, 255, 255, 0)';
-                context.fill();
-                context.lineWidth = 30;
-                context.strokeStyle = 'rgb(0, 255, 0)';
-                context.stroke();
-                selectTexture.update(invertY);
-                // create and return actual material
-                var selectMaterial = new BABYLON.StandardMaterial('selectedBoxMaterial', scene);
-                selectMaterial.diffuseTexture = selectTexture;
-                selectMaterial.opacityTexture = selectTexture;
-                return selectMaterial;
-            }
-
-            function createLights(scene) {
-                var lights = {};
-                
-                lights.sun = new BABYLON.DirectionalLight("Sun", new BABYLON.Vector3(-1.5, -2, -1), scene);
-                
-                lights.atmospheric = new BABYLON.HemisphericLight("atmospheric", new BABYLON.Vector3(-1.5, 2, -1), scene);
-                lights.atmospheric.diffuse = new BABYLON.Color3(1, 1, 1);
-                lights.atmospheric.specular = new BABYLON.Color3(1, 1, 1);
-                lights.atmospheric.groundColor = new BABYLON.Color3(0.1, 0.1, 0.1);
-                lights.atmospheric.intensity = 0.4;
-
-                return lights;
-            }
+            // =====
+            // Event handlers
+            // =====
 
             function createEventHandlers() {
                 var eventHandlers = {};
@@ -262,7 +191,6 @@
                 return eventHandlers;
             }
 
-            // Handle camera movements with keyboard
             function onKeyDown(evt) {
                 var key = String.fromCharCode(evt.keyCode);
                 if (key == 'W') {
@@ -280,7 +208,6 @@
                 evt.stopPropagation();
             }
 
-            // Handle click events
             function onPointerDown(evt) {
                 if (isLeftClick(evt)) {
                     game.selectionStartPosition = { x: scene.pointerX, y: scene.pointerY };
@@ -305,7 +232,7 @@
 
             function onPointerUp(evt) {
                 game.selectionEndPosition = { x: scene.pointerX, y: scene.pointerY };
-                deselectAllMeshes();
+                deselectAllMeshes(units);
                 if (!isMouseMovedDuringSelection(game.selectionStartPosition, game.selectionEndPosition)) {
                     // Single selection
                     var pickInfo = scene.pick(scene.pointerX, scene.pointerY, function (mesh) { return mesh !== ground; });
@@ -318,35 +245,12 @@
                 } else {
                     // Multi selection
                     setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
-                    game.selectedElements = getMeshesSelectedByRubberBand();
+                    game.selectedElements = getMeshesSelectedByRubberBand(scene, units, game.rubberBandSelectionMesh);
                     console.log("multi selection", game.selectedElements);
                     selectMeshes(game.selectedElements, scene);
                 }
                 game.selectionStartPosition = null;
                 game.selectionEndPosition = null;
-            }
-
-            function selectMeshes(meshes, scene) {
-                for (var index in meshes) {
-                    selectMesh(meshes[index], scene); 
-                }
-            }
-
-            function selectMesh(mesh, scene) {
-                mesh.selectionCircle = BABYLON.Mesh.CreateDisc('selectionCircle', 15, 32, scene);
-                mesh.selectionCircle.material = materials.selectedRingMaterial;;
-                mesh.selectionCircle.parent = mesh;
-                mesh.selectionCircle.position.y = 0.1;
-                mesh.selectionCircle.rotation.x = Math.PI / 2;
-                mesh.selectionCircle.receiveShadows = true;
-            }
-
-            function disableDefaultRightClickMenu() {
-                document.addEventListener("contextmenu", function (evt) { evt.preventDefault(); });
-            }
-
-            function isMouseMovedDuringSelection(startPos, endPos) {
-                return startPos.x != endPos.x || startPos.y != endPos.y;
             }
         
             return scene;
@@ -364,6 +268,151 @@
         window.addEventListener("resize", function () {
             engine.resize();
         });
+
+        // =====
+        // 
+        // UTIL FUNCTIONS
+        // 
+        // =====
+
+        // =====
+        // Lights
+        // =====
+
+        function createLights(scene) {
+            var lights = {};
+
+            lights.sun = new BABYLON.DirectionalLight("Sun", new BABYLON.Vector3(-1.5, -2, -1), scene);
+
+            lights.atmospheric = new BABYLON.HemisphericLight("atmospheric", new BABYLON.Vector3(-1.5, 2, -1), scene);
+            lights.atmospheric.diffuse = new BABYLON.Color3(1, 1, 1);
+            lights.atmospheric.specular = new BABYLON.Color3(1, 1, 1);
+            lights.atmospheric.groundColor = new BABYLON.Color3(0.1, 0.1, 0.1);
+            lights.atmospheric.intensity = 0.4;
+
+            return lights;
+        }
+
+        // =====
+        // Materials
+        // =====
+
+        function createMaterials(scene) {
+            var materials = {};
+
+            // Selected ring material
+            materials.selectionRingMaterial = createselectionRingMaterial(scene);
+
+            // Yellow material
+            materials.yellowMaterial = new BABYLON.StandardMaterial("yellow", scene);
+            materials.yellowMaterial.diffuseColor = new BABYLON.Color3(1, 1, 0);
+
+            // Ground material
+            materials.groundMaterial = new BABYLON.StandardMaterial("ground", scene);
+            materials.groundMaterial.diffuseColor = new BABYLON.Color3(1, 1, 1);
+
+            return materials;
+        }
+
+        function createselectionRingMaterial(scene) {
+            var selectTexture = new BABYLON.DynamicTexture("selectTexture", 512, scene, true);
+            // draw circle using 2d context
+            var context = selectTexture._context;
+            var invertY = true;
+            var size = selectTexture.getSize();
+            var posX = 256;
+            var posY = 256;
+            var radius = 220;
+            context.arc(posX, posY, radius, 0, 2 * Math.PI, false);
+            context.fillStyle = 'rgba(255, 255, 255, 0)';
+            context.fill();
+            context.lineWidth = 30;
+            context.strokeStyle = 'rgb(0, 255, 0)';
+            context.stroke();
+            selectTexture.update(invertY);
+            // create and return actual material
+            var selectMaterial = new BABYLON.StandardMaterial('selectedBoxMaterial', scene);
+            selectMaterial.diffuseTexture = selectTexture;
+            selectMaterial.opacityTexture = selectTexture;
+            return selectMaterial;
+        }
+
+        // =====
+        // Selection
+        // =====
+
+        function deselectAllMeshes(meshes) {
+            for (var index in meshes) {
+                meshes[index].material = meshes[index].originalMaterial;
+                if (meshes[index].selectionRing) {
+                    meshes[index].selectionRing.dispose();
+                }
+            }
+        }
+
+        function getMeshesSelectedByRubberBand(scene, meshes, rubberband) {
+            var selectedMeshes = [];
+            scene.render();
+            for (var index in meshes) {
+                var mesh = meshes[index];
+                if (rubberband.intersectsPoint(mesh.position)) {
+                    selectedMeshes.push(mesh);
+                }
+            }
+            return selectedMeshes;
+        }
+
+        function getBottomPositionOfMesh(mesh) {
+            var pos = mesh.position.clone();
+            var minimumPos = mesh.getBoundingInfo().boundingBox.minimumWorld;
+            pos.y = minimumPos.y;
+            return pos;
+        }
+
+        function getWidthXOfMesh(mesh) {
+            return mesh.getBoundingInfo().boundingBox.maximumWorld.x - mesh.getBoundingInfo().boundingBox.minimumWorld.x;
+        }
+
+        function getWidthZOfMesh(mesh) {
+            return mesh.getBoundingInfo().boundingBox.maximumWorld.z - mesh.getBoundingInfo().boundingBox.minimumWorld.z;
+        }
+
+        function getHeightOfMesh(mesh) {
+            return mesh.getBoundingInfo().boundingBox.maximumWorld.y - mesh.getBoundingInfo().boundingBox.minimumWorld.y;
+        }
+
+        function isLeftClick(evt) {
+            return evt.button == 0;
+        }
+
+        function isRightClick(evt) {
+            return evt.button == 2;
+        }
+
+        function isMouseMovedDuringSelection(startPos, endPos) {
+            return startPos.x != endPos.x || startPos.y != endPos.y;
+        }
+
+        function selectMeshes(meshes, scene) {
+            for (var index in meshes) {
+                selectMesh(meshes[index], scene);
+            }
+        }
+
+        function selectMesh(mesh, scene) {
+            mesh.selectionRing = game.meshTemplates.selectionRing.clone("selectionRing");
+            mesh.selectionRing.parent = mesh;
+            mesh.selectionRing.visibility = true;
+        }
+
+        // =====
+        // General
+        // =====
+
+        function disableDefaultRightClickMenu() {
+            document.addEventListener("contextmenu", function (evt) { evt.preventDefault(); });
+        }
+
     </script>
 </body>
 </html>
