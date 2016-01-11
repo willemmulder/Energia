@@ -57,7 +57,8 @@
 
         var game = {
             selectedElements : [],
-            selectionStartPosition : null,
+            selectionStartPosition: null,
+            selectionCurrentPosition: null,
             selectionEndPosition : null,
             selectionInProgress : false,
             rubberBand: null,
@@ -65,8 +66,46 @@
             rubberBandSelectionSquare: null,
             meshTemplates: {
 
+            },
+            sidebarElements: {
+
             }
         };
+
+        // =====
+        // Init
+        // =====
+
+        var scene = createScene();
+
+        babylon.runRenderLoop(function () {
+            scene.render();
+        });
+
+        // =====
+        // Rendering loop
+        // =====
+
+        requestAnimationFrame(pixiAnimate);
+        function pixiAnimate() {
+            requestAnimationFrame(pixiAnimate);
+            graphics2D.clear();
+            drawSidebar(graphics2D);
+            if (game.selectionStartPosition && game.selectionCurrentPosition) {
+                drawSelectionSquare(graphics2D, game.selectionStartPosition, game.selectionCurrentPosition);
+            }
+            pixi.render(scene2D);
+        }
+
+        // Resize
+        window.addEventListener("resize", function () {
+            babylon.resize();
+            pixi.resize();
+        });
+
+        // =====
+        // Set up scene, cameras, light, event handlers etc
+        // =====
 
         function createScene() {
         
@@ -157,7 +196,6 @@
         	    game.rubberBandSelectionMesh = new BABYLON.MeshBuilder.CreateBox("rubberBand", { height: 100, width: endPosOnFloor.x - startPosOnFloor.x, depth: endPosOnFloor.z - startPosOnFloor.z, updateable: true }, scene);
         	    game.rubberBandSelectionMesh.position = new BABYLON.Vector3(startPosOnFloor.x + (endPosOnFloor.x - startPosOnFloor.x) / 2, 50, startPosOnFloor.z + (endPosOnFloor.z - startPosOnFloor.z) / 2);
         	    game.rubberBandSelectionMesh.visibility = false;
-                // TODO: draw 2d image on canvas2D
         	}
 
         	
@@ -222,13 +260,6 @@
             function onPointerDown(evt) {
                 if (isLeftClick(evt)) {
                     game.selectionStartPosition = { x: evt.clientX, y: evt.clientY };
-                } else if (isRightClick(evt)) {
-                    var pickInfo = scene.pick(scene.pointerX, scene.pointerY, function (mesh) { return mesh == ground; });
-                    if (pickInfo.hit) {
-                        var targetPos = pickInfo.pickedPoint;
-                        targetPos.y = game.selectedElement.position.y;
-                        moveMeshTo(game.selectedElement, targetPos);
-                    }
                 }
                 evt.stopPropagation();
                 evt.preventDefault();
@@ -237,7 +268,7 @@
 
             function onPointerMove(evt) {
                 if (game.selectionStartPosition) {
-                    drawSelectionSquare(game.selectionStartPosition, { x: evt.clientX, y: evt.clientY });
+                    game.selectionCurrentPosition = { x: evt.clientX, y: evt.clientY };
                 }
             }
 
@@ -245,45 +276,41 @@
                 game.selectionEndPosition = { x: evt.clientX, y: evt.clientY };
                 deselectAllMeshes(units);
                 clearSelectionSquare();
-                if (!isMouseMovedDuringSelection(game.selectionStartPosition, game.selectionEndPosition)) {
-                    // Single selection
-                    var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh.selectable; });
-                    if (pickInfo.hit) {
-                        var currentMesh = pickInfo.pickedMesh;
-                        game.selectedElements = [currentMesh];
+                if (game.selectionStartPosition) {
+                    if (!isMouseMovedDuringSelection(game.selectionStartPosition, game.selectionEndPosition)) {
+                        // Single selection
+                        var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh.selectable; });
+                        if (pickInfo.hit) {
+                            var currentMesh = pickInfo.pickedMesh;
+                            game.selectedElements = [currentMesh];
+                            selectMeshes(game.selectedElements, scene);
+                        }
+                    } else {
+                        // Multi selection
+                        setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
+                        game.selectedElements = getMeshesSelectedByRubberBand(scene, units, game.rubberBandSelectionMesh);
                         selectMeshes(game.selectedElements, scene);
                     }
-                } else {
-                    // Multi selection
-                    setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
-                    game.selectedElements = getMeshesSelectedByRubberBand(scene, units, game.rubberBandSelectionMesh);
-                    selectMeshes(game.selectedElements, scene);
+                }
+                if (isRightClick(evt)) {
+                    var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh == ground; });
+                    if (pickInfo.hit) {
+                        var targetPos = pickInfo.pickedPoint;
+                        for (var index in game.selectedElements) {
+                            var selectedElement = game.selectedElements[index];
+                            targetPos.y = selectedElement.position.y;
+                            moveMeshTo(selectedElement, targetPos);
+                        }
+                    }
                 }
                 game.selectionStartPosition = null;
+                game.selectionCurrentPosition = null;
                 game.selectionEndPosition = null;
             }
         
             return scene;
         	
         };
-        
-        var scene = createScene();
-
-        babylon.runRenderLoop(function () {
-            scene.render();
-        });
-
-        requestAnimationFrame(pixiAnimate);
-        function pixiAnimate() {
-            requestAnimationFrame(pixiAnimate);
-            pixi.render(scene2D);
-        }
-
-        // Resize
-        window.addEventListener("resize", function () {
-            babylon.resize();
-            pixi.resize();
-        });
 
         // =====
         // 
@@ -421,7 +448,7 @@
             mesh.selectionRing.visibility = true;
         }
 
-        function drawSelectionSquare(startPos, endPos) {
+        function drawSelectionSquare(graphics2D, startPos, endPos) {
             graphics2D.clear();
             graphics2D.lineStyle(2, 0x00FF00, 1);
             graphics2D.drawRect(startPos.x, startPos.y, (endPos.x - startPos.x), (endPos.y - startPos.y));
@@ -429,6 +456,24 @@
 
         function clearSelectionSquare() {
             graphics2D.clear();
+        }
+
+        // =====
+        // Sidebar rendering
+        // =====
+
+        function drawSidebar(scene2D) {
+            if (!game.sidebarElements.parent) {
+                game.sidebarElements.parent = new PIXI.Container();
+                game.sidebarElements.parent.x = 10;
+                game.sidebarElements.parent.y = 10;
+                scene2D.addChild(game.sidebarElements.parent);
+            }
+            if (!game.sidebarElements.fps) {
+                game.sidebarElements.fps = new PIXI.Text(babylon.fps, { font: '24px Verdana', fill: '#fff' });
+                game.sidebarElements.parent.addChild(game.sidebarElements.fps);
+            }
+            game.sidebarElements.fps.text = "3D: " + Math.round(babylon.fps) + " fps";
         }
 
         // =====
