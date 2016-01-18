@@ -56,7 +56,7 @@
         window.scene2D.addChild(window.graphics2D);
 
         var game = {
-            selectedElements : [],
+            selectedUnits : [],
             selectionStartPosition: null,
             selectionCurrentPosition: null,
             selectionEndPosition : null,
@@ -69,7 +69,11 @@
             },
             sidebarElements: {
 
-            }
+            },
+            units : [
+
+            ],
+            last3DRenderTime : new Date().getTime()
         };
 
         // =====
@@ -77,9 +81,8 @@
         // =====
 
         var scene = createScene();
-
         babylon.runRenderLoop(function () {
-            scene.render();
+        	render3DScene(scene);
         });
 
         // =====
@@ -137,12 +140,17 @@
             selectionRingTemplate.selectable = false;
 
             // units
-        	var units = [];
+        	game.units = [];
             for (var i = 0; i < 10; i++) {
-                var unit = game.meshTemplates.unit.clone("unit");
-                unit.visibility = true;
-                unit.position = new BABYLON.Vector3(-i * 50, 5, 0);
-                units.push(unit);
+            	var unit = {
+            		position : new BABYLON.Vector3(-i * 50, 5, 0),
+            		targetPositions : [], // i.e. waypoints
+            		maxVelocity : 100, // in 'blocks' per second
+            		mesh : game.meshTemplates.unit.clone("unit")
+            	}
+            	unit.mesh.unit = unit; // circular ref
+                unit.mesh.visibility = true;
+                game.units.push(unit);
             }
         
         	// Ground
@@ -155,8 +163,9 @@
             // =====
 
         	var shadowGenerator = new BABYLON.ShadowGenerator(2048, lights.sun);
-        	for (var index in units) {
-        		shadowGenerator.getShadowMap().renderList.push(units[index]);	
+        	for (var index in game.units) {
+        		var unit = game.units[index];
+        		shadowGenerator.getShadowMap().renderList.push(unit.mesh);	
         	}
         	shadowGenerator.useVarianceShadowMap = true;
         	ground.receiveShadows = true;
@@ -200,28 +209,8 @@
 
         	
 
-        	function moveMeshTo(mesh, pos) {
-        	    if (mesh.animations.length) {
-        	        scene.getAnimatableByTarget(mesh).stop();
-        	    }
-
-        	    var path = pos.subtract(mesh.position);
-        	    var length = Math.round(path.length());
-        	    var framesCount = length / 2;
-
-        	    var currentAnimation = new BABYLON.Animation("animation", "position", 60, BABYLON.Animation.ANIMATIONTYPE_VECTOR3, BABYLON.Animation.ANIMATIONLOOPMODE_CONSTANT);
-        	    var animationFrames = [];
-        	    animationFrames.push({
-        	        frame: 0,
-        	        value: mesh.position
-        	    });
-        	    animationFrames.push({
-        	        frame: framesCount,
-        	        value: pos
-        	    });
-        	    currentAnimation.setKeys(animationFrames);
-        	    mesh.animations.push(currentAnimation);
-        	    scene.beginAnimation(mesh, 0, framesCount, true);
+        	function moveUnitTo(mesh, pos) {
+        	    
         	    console.log("animating", mesh, "to", pos);
         	}
 
@@ -274,7 +263,7 @@
 
             function onPointerUp(evt) {
                 game.selectionEndPosition = { x: evt.clientX, y: evt.clientY };
-                deselectAllMeshes(units);
+                deselectAllUnits(game.units);
                 clearSelectionSquare();
                 if (game.selectionStartPosition) {
                     if (!isMouseMovedDuringSelection(game.selectionStartPosition, game.selectionEndPosition)) {
@@ -282,24 +271,25 @@
                         var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh.selectable; });
                         if (pickInfo.hit) {
                             var currentMesh = pickInfo.pickedMesh;
-                            game.selectedElements = [currentMesh];
-                            selectMeshes(game.selectedElements, scene);
+                            var currentUnit = currentMesh.unit;
+                            game.selectedUnits = [currentUnit];
+                            selectUnits(game.selectedUnits, scene);
                         }
                     } else {
                         // Multi selection
                         setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
-                        game.selectedElements = getMeshesSelectedByRubberBand(scene, units, game.rubberBandSelectionMesh);
-                        selectMeshes(game.selectedElements, scene);
+                        game.selectedUnits = getUnitsSelectedByRubberBand(scene, game.units, game.rubberBandSelectionMesh);
+                        selectUnits(game.selectedUnits, scene);
                     }
                 }
                 if (isRightClick(evt)) {
                     var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh == ground; });
                     if (pickInfo.hit) {
                         var targetPos = pickInfo.pickedPoint;
-                        for (var index in game.selectedElements) {
-                            var selectedElement = game.selectedElements[index];
-                            targetPos.y = selectedElement.position.y;
-                            moveMeshTo(selectedElement, targetPos);
+                        for (var index in game.selectedUnits) {
+                            var unit = game.selectedUnits[index];
+                            targetPos.y = unit.position.y;
+                            unit.targetPositions = [targetPos];
                         }
                     }
                 }
@@ -384,6 +374,10 @@
         // Selection
         // =====
 
+        function deselectAllUnits(units) {
+        	deselectAllMeshes(getUnitMeshes(units));
+        }
+
         function deselectAllMeshes(meshes) {
             for (var index in meshes) {
                 meshes[index].material = meshes[index].originalMaterial;
@@ -393,16 +387,17 @@
             }
         }
 
-        function getMeshesSelectedByRubberBand(scene, meshes, rubberband) {
-            var selectedMeshes = [];
+        function getUnitsSelectedByRubberBand(scene, units, rubberband) {
+            var selectedUnits = [];
             scene.render();
-            for (var index in meshes) {
-                var mesh = meshes[index];
+            for (var index in units) {
+            	var unit = units[index];
+                var mesh = unit.mesh;
                 if (rubberband.intersectsPoint(mesh.position)) {
-                    selectedMeshes.push(mesh);
+                    selectedUnits.push(unit);
                 }
             }
-            return selectedMeshes;
+            return selectedUnits;
         }
 
         function getBottomPositionOfMesh(mesh) {
@@ -436,9 +431,9 @@
             return startPos.x != endPos.x || startPos.y != endPos.y;
         }
 
-        function selectMeshes(meshes, scene) {
-            for (var index in meshes) {
-                selectMesh(meshes[index], scene);
+        function selectUnits(units, scene) {
+            for (var index in units) {
+                selectMesh(units[index].mesh, scene);
             }
         }
 
@@ -456,6 +451,37 @@
 
         function clearSelectionSquare() {
             graphics2D.clear();
+        }
+
+        // =====
+        // 3D rendering
+        // =====
+        function render3DScene(scene) {
+        	var currentRenderTime = new Date().getTime();
+        	var timeDiff = currentRenderTime - game.last3DRenderTime;
+        	// Set positions
+        	for(var index in game.units) {
+        		var unit = game.units[index];
+        		// See if unit needs to move
+        		if (unit.targetPositions.length) {
+        			var targetPosition = unit.targetPositions[0];
+        			var targetMovementVector = targetPosition.subtract(unit.position);
+					var velocity = unit.maxVelocity;
+        			var movement = velocity * (timeDiff / 1000);
+        			var movementVector = targetMovementVector.clone().normalize().scale(movement);
+        			unit.position.addInPlace(movementVector);
+        			if (movementVector.length() > targetMovementVector.length()) {
+        				// we are overshooting our target destination
+        				unit.position = targetPosition;
+        				unit.targetPositions = [];
+        			}
+        		}
+        		unit.mesh.position = unit.position;
+        	}
+        	// Store time
+        	game.last3DRenderTime = currentRenderTime;
+        	// Render
+            scene.render();
         }
 
         // =====
@@ -482,6 +508,14 @@
 
         function disableDefaultRightClickMenu() {
             document.addEventListener("contextmenu", function (evt) { evt.preventDefault(); });
+        }
+
+        function getUnitMeshes(units) {
+        	var meshes = [];
+        	for(var index in units) {
+        		meshes.push(units[index].mesh);
+        	}
+        	return meshes;
         }
 
     </script>
