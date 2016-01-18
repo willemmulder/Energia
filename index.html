@@ -64,6 +64,7 @@
             rubberBand: null,
             rubberBandSelectionMesh: null,
             rubberBandSelectionSquare: null,
+            materials : [],
             meshTemplates: {
 
             },
@@ -113,7 +114,7 @@
         function createScene() {
         
             var lights = createLights(scene);
-            var materials = createMaterials(scene);
+            game.materials = createMaterials(scene);
 
             window.camera = new BABYLON.FreeCamera("Camera", new BABYLON.Vector3(0, 400, -200), scene);
             camera.rotation.y = 0; // look straigt forward
@@ -126,13 +127,13 @@
             // Templates
             var unitTemplate;
             game.meshTemplates.unit = unitTemplate = BABYLON.Mesh.CreateBox("UnitTemplate", 10, scene);
-            unitTemplate.material = unitTemplate.originalMaterial = materials.yellowMaterial;
+            unitTemplate.material = unitTemplate.originalMaterial = game.materials.yellowMaterial;
             unitTemplate.visibility = false;
             unitTemplate.selectable = true;
 
             var selectionRingTemplate;
             game.meshTemplates.selectionRing = selectionRingTemplate = BABYLON.Mesh.CreateDisc('selectionRing', 15, 32, scene);
-            selectionRingTemplate.material = materials.selectionRingMaterial;;
+            selectionRingTemplate.material = game.materials.selectionRingMaterial;;
             selectionRingTemplate.position.y = 0.1;
             selectionRingTemplate.rotation.x = Math.PI / 2;
             selectionRingTemplate.receiveShadows = true;
@@ -146,7 +147,7 @@
             		position : new BABYLON.Vector3(-i * 50, 5, 0),
             		targetPositions : [], // i.e. waypoints
             		maxVelocity : 100, // in 'blocks' per second
-            		mesh : game.meshTemplates.unit.clone("unit")
+            		mesh : game.meshTemplates.unit.clone("unit " + i)
             	}
             	unit.mesh.unit = unit; // circular ref
                 unit.mesh.visibility = true;
@@ -155,7 +156,7 @@
         
         	// Ground
         	var ground = BABYLON.Mesh.CreateGround("Ground", 1000, 1000, 1, scene, true);
-        	ground.material = materials.groundMaterial;
+        	ground.material = game.materials.groundMaterial;
         	ground.selectable = false;
         	
             // =====
@@ -263,9 +264,9 @@
 
             function onPointerUp(evt) {
                 game.selectionEndPosition = { x: evt.clientX, y: evt.clientY };
-                deselectAllUnits(game.units);
                 clearSelectionSquare();
                 if (game.selectionStartPosition) {
+                    deselectAllUnits(game.units);
                     if (!isMouseMovedDuringSelection(game.selectionStartPosition, game.selectionEndPosition)) {
                         // Single selection
                         var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh.selectable; });
@@ -375,6 +376,7 @@
         // =====
 
         function deselectAllUnits(units) {
+        	game.selectedUnits = [];
         	deselectAllMeshes(getUnitMeshes(units));
         }
 
@@ -456,7 +458,7 @@
         // =====
         // 3D rendering
         // =====
-        function render3DScene(scene) {
+        function render3DScene(scene, materials) {
         	var currentRenderTime = new Date().getTime();
         	var timeDiff = currentRenderTime - game.last3DRenderTime;
         	// Set positions
@@ -477,6 +479,27 @@
         			}
         		}
         		unit.mesh.position = unit.position;
+        	}
+        	// Check visibility
+        	if (game.selectedUnits.length) {
+        		var selectedUnit = game.selectedUnits[0];
+        		// check if selected unit can see other units
+        		for(var index in game.units) {
+	        		var targetUnit = game.units[index];
+	        		if (targetUnit == selectedUnit) {
+	        			continue;
+	        		}
+	        		var directionVector = targetUnit.position.subtract(selectedUnit.position).normalize();
+	        		var ray = new BABYLON.Ray(selectedUnit.position, directionVector);
+	        		var pickInfo = scene.pickWithRay(ray, function(mesh) { return mesh.unit != null && mesh.unit != selectedUnit; });
+	        		if (pickInfo.hit && pickInfo.pickedMesh == targetUnit.mesh) {
+	        			// Can see
+	        			targetUnit.mesh.material = game.materials.yellowMaterial;
+	        		} else {
+	        			// Can not see
+	        			targetUnit.mesh.material = game.materials.groundMaterial;
+	        		}
+	    		}
         	}
         	// Store time
         	game.last3DRenderTime = currentRenderTime;
