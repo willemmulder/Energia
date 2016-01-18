@@ -74,7 +74,7 @@
             units : [
 
             ],
-            last3DRenderTime : new Date().getTime()
+            last3DRenderTime : window.performance.now()
         };
 
         // =====
@@ -82,24 +82,26 @@
         // =====
 
         var scene = createScene();
-        babylon.runRenderLoop(function () {
-        	render3DScene(scene);
-        });
 
         // =====
         // Rendering loop
         // =====
 
-        requestAnimationFrame(pixiAnimate);
+        babylon.runRenderLoop(function () {
+            render3DScene(scene);
+        });
+
+        /*
+        window.requestAnimationFrame(pixiAnimate);
         function pixiAnimate() {
-            requestAnimationFrame(pixiAnimate);
+            window.requestAnimationFrame(pixiAnimate);
             graphics2D.clear();
             drawSidebar(graphics2D);
             if (game.selectionStartPosition && game.selectionCurrentPosition) {
                 drawSelectionSquare(graphics2D, game.selectionStartPosition, game.selectionCurrentPosition);
             }
             pixi.render(scene2D);
-        }
+        }*/
 
         // Resize
         window.addEventListener("resize", function () {
@@ -459,7 +461,7 @@
         // 3D rendering
         // =====
         function render3DScene(scene, materials) {
-        	var currentRenderTime = new Date().getTime();
+        	var currentRenderTime = window.performance.now();
         	var timeDiff = currentRenderTime - game.last3DRenderTime;
         	// Set positions
         	for(var index in game.units) {
