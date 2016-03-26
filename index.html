@@ -3,11 +3,12 @@
     <head>
         <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
 
-        <title>Babylon.js sample code</title>
+        <title>Energia</title>
         <!-- Babylon.js -->
+        <!--
         <script src="http://www.babylonjs.com/hand.minified-1.2.js"></script>
         <script src="http://www.babylonjs.com/cannon.js"></script>
-        <script src="http://www.babylonjs.com/oimo.js"></script>
+        <script src="http://www.babylonjs.com/oimo.js"></script>-->
         <script src="http://www.babylonjs.com/babylon.js"></script>
         <script src="./eventHandlers.js"></script>
         <script src="./libs/pixi.js"></script>
@@ -91,7 +92,6 @@
             render3DScene(scene);
         });
 
-        /*
         window.requestAnimationFrame(pixiAnimate);
         function pixiAnimate() {
             window.requestAnimationFrame(pixiAnimate);
@@ -101,7 +101,7 @@
                 drawSelectionSquare(graphics2D, game.selectionStartPosition, game.selectionCurrentPosition);
             }
             pixi.render(scene2D);
-        }*/
+        }
 
         // Resize
         window.addEventListener("resize", function () {
@@ -183,11 +183,11 @@
 
             var eventHandlers = createEventHandlers();
         	
-        	document.removeEventListener("keydown");
+        	document.removeEventListener("keydown", eventHandlers.onKeyDown);
         	document.addEventListener("keydown", eventHandlers.onKeyDown, false);
-        	canvas2D.addEventListener("pointerdown", eventHandlers.onPointerDown);
-        	canvas2D.addEventListener("pointermove", eventHandlers.onPointerMove);
-        	canvas2D.addEventListener("pointerup", eventHandlers.onPointerUp);
+        	canvas2D.addEventListener("mousedown", eventHandlers.onPointerDown); // pointerdown is not supported in chrome
+        	canvas2D.addEventListener("mousemove", eventHandlers.onPointerMove); // pointermove is not supported in chrome
+        	canvas2D.addEventListener("mouseup", eventHandlers.onPointerUp); // pointerup is not supported in chrome
         	
             disableDefaultRightClickMenu();
 
