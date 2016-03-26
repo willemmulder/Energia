@@ -10,7 +10,6 @@
         <script src="http://www.babylonjs.com/cannon.js"></script>
         <script src="http://www.babylonjs.com/oimo.js"></script>-->
         <script src="http://www.babylonjs.com/babylon.js"></script>
-        <script src="./eventHandlers.js"></script>
         <script src="./libs/pixi.js"></script>
         <style>
             html, body {
@@ -62,19 +61,30 @@
             selectionCurrentPosition: null,
             selectionEndPosition : null,
             selectionInProgress : false,
+            mouseCurrentPosition : null,
             rubberBand: null,
             rubberBandSelectionMesh: null,
             rubberBandSelectionSquare: null,
+            newEntityPlacement : {
+                placementInProgress : false,
+                entityType : null,
+                entity : null,
+                desiredPosition : null
+            },
             materials : [],
             meshTemplates: {
+
+            },
+            entityPlacementMeshTemplates : {
 
             },
             sidebarElements: {
 
             },
-            units : [
+            entities : [
 
             ],
+            ground : null,
             last3DRenderTime : window.performance.now()
         };
 
@@ -134,7 +144,7 @@
             unitTemplate.selectable = true;
 
             var selectionRingTemplate;
-            game.meshTemplates.selectionRing = selectionRingTemplate = BABYLON.Mesh.CreateDisc('selectionRing', 15, 32, scene);
+            game.meshTemplates.selectionRing = selectionRingTemplate = BABYLON.Mesh.CreateDisc('SelectionRing', 15, 32, scene);
             selectionRingTemplate.material = game.materials.selectionRingMaterial;;
             selectionRingTemplate.position.y = 0.1;
             selectionRingTemplate.rotation.x = Math.PI / 2;
@@ -142,36 +152,33 @@
             selectionRingTemplate.visibility = false;
             selectionRingTemplate.selectable = false;
 
-            // units
-        	game.units = [];
+            game.entityPlacementMeshTemplates = {};
+            game.entityPlacementMeshTemplates.unit = game.meshTemplates.unit.clone("placementUnitTemplate");
+
+            // Create units
+        	game.entities = [];
             for (var i = 0; i < 10; i++) {
-            	var unit = {
-            		position : new BABYLON.Vector3(-i * 50, 5, 0),
-            		targetPositions : [], // i.e. waypoints
-            		maxVelocity : 100, // in 'blocks' per second
-            		mesh : game.meshTemplates.unit.clone("unit " + i)
-            	}
-            	unit.mesh.unit = unit; // circular ref
-                unit.mesh.visibility = true;
-                game.units.push(unit);
+                var mesh = game.meshTemplates.unit.clone("unit " + game.entities.length);
+                var position = new BABYLON.Vector3(-i * 50, 5, 0);
+            	var entity = createEntity(mesh, position);
             }
         
         	// Ground
-        	var ground = BABYLON.Mesh.CreateGround("Ground", 1000, 1000, 1, scene, true);
-        	ground.material = game.materials.groundMaterial;
-        	ground.selectable = false;
+        	game.ground = BABYLON.Mesh.CreateGround("Ground", 1000, 1000, 1, scene, true);
+        	game.ground.material = game.materials.groundMaterial;
+        	game.ground.selectable = false;
         	
             // =====
         	// Shadow
             // =====
 
         	var shadowGenerator = new BABYLON.ShadowGenerator(2048, lights.sun);
-        	for (var index in game.units) {
-        		var unit = game.units[index];
+        	for (var index in game.entities) {
+        		var unit = game.entities[index];
         		shadowGenerator.getShadowMap().renderList.push(unit.mesh);	
         	}
         	shadowGenerator.useVarianceShadowMap = true;
-        	ground.receiveShadows = true;
+        	game.ground.receiveShadows = true;
         	
             scene.registerBeforeRender(function () {
         		// ...
@@ -198,8 +205,8 @@
             // =====
 
         	function setRubberBand(startPos, endPos) {
-        	    var startPick = scene.pick(startPos.x, startPos.y, function (mesh) { return mesh == ground; });
-        	    var endPick = scene.pick(endPos.x, endPos.y, function (mesh) { return mesh == ground; });
+        	    var startPick = scene.pick(startPos.x, startPos.y, function (mesh) { return mesh == game.ground; });
+        	    var endPick = scene.pick(endPos.x, endPos.y, function (mesh) { return mesh == game.ground; });
         	    if (!startPick.hit || !endPick.hit) {
         	        return;
         	    }
@@ -208,13 +215,6 @@
         	    game.rubberBandSelectionMesh = new BABYLON.MeshBuilder.CreateBox("rubberBand", { height: 100, width: endPosOnFloor.x - startPosOnFloor.x, depth: endPosOnFloor.z - startPosOnFloor.z, updateable: true }, scene);
         	    game.rubberBandSelectionMesh.position = new BABYLON.Vector3(startPosOnFloor.x + (endPosOnFloor.x - startPosOnFloor.x) / 2, 50, startPosOnFloor.z + (endPosOnFloor.z - startPosOnFloor.z) / 2);
         	    game.rubberBandSelectionMesh.visibility = false;
-        	}
-
-        	
-
-        	function moveUnitTo(mesh, pos) {
-        	    
-        	    console.log("animating", mesh, "to", pos);
         	}
 
             // =====
@@ -262,37 +262,59 @@
                 if (game.selectionStartPosition) {
                     game.selectionCurrentPosition = { x: evt.clientX, y: evt.clientY };
                 }
+                game.mouseCurrentPosition = { x: evt.clientX, y: evt.clientY };
             }
 
             function onPointerUp(evt) {
                 game.selectionEndPosition = { x: evt.clientX, y: evt.clientY };
                 clearSelectionSquare();
-                if (game.selectionStartPosition) {
-                    deselectAllUnits(game.units);
-                    if (!isMouseMovedDuringSelection(game.selectionStartPosition, game.selectionEndPosition)) {
-                        // Single selection
-                        var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh.selectable; });
-                        if (pickInfo.hit) {
-                            var currentMesh = pickInfo.pickedMesh;
-                            var currentUnit = currentMesh.unit;
-                            game.selectedUnits = [currentUnit];
-                            selectUnits(game.selectedUnits, scene);
-                        }
-                    } else {
-                        // Multi selection
-                        setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
-                        game.selectedUnits = getUnitsSelectedByRubberBand(scene, game.units, game.rubberBandSelectionMesh);
-                        selectUnits(game.selectedUnits, scene);
+                var clickedSprite = getSpriteFromPosition(game.sidebarElements.buttons, game.selectionEndPosition);
+                if (clickedSprite) {
+                    if (clickedSprite.clickEventName == "newUnit") {
+                        prepareNewEntityPlacement("unit");
                     }
-                }
-                if (isRightClick(evt)) {
-                    var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh == ground; });
-                    if (pickInfo.hit) {
-                        var targetPos = pickInfo.pickedPoint;
-                        for (var index in game.selectedUnits) {
-                            var unit = game.selectedUnits[index];
-                            targetPos.y = unit.position.y;
-                            unit.targetPositions = [targetPos];
+                    /*
+                    if (clickedSprite.clickEventName == "newMainBuilding") {
+                        prepareNewEntityPlacement("mainBuilding");
+                    }*/
+                } else {
+                    if (game.newEntityPlacement.placementInProgress) {
+                        hideEntities(game.entityPlacementMeshTemplates);
+                        var mesh = game.newEntityPlacement.entity.clone("unit " + game.entities.length);
+                        var targetPosition = game.newEntityPlacement.entity.position;
+                        createEntity(mesh, targetPosition);
+                        game.newEntityPlacement.entity.visibility = false;
+                        game.newEntityPlacement.entity = null;
+                        game.newEntityPlacement.placementInProgress = false;
+                    } else {
+                        if (game.selectionStartPosition) {
+                            deselectAllUnits(game.entities);
+                            if (!isMouseMovedDuringSelection(game.selectionStartPosition, game.selectionEndPosition)) {
+                                // Single selection
+                                var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh.selectable; });
+                                if (pickInfo.hit) {
+                                    var currentMesh = pickInfo.pickedMesh;
+                                    var currentUnit = currentMesh.unit;
+                                    game.selectedUnits = [currentUnit];
+                                    selectUnits(game.selectedUnits, scene);
+                                }
+                            } else {
+                                // Multi selection
+                                setRubberBand(game.selectionStartPosition, game.selectionEndPosition);
+                                game.selectedUnits = getUnitsSelectedByRubberBand(scene, game.entities, game.rubberBandSelectionMesh);
+                                selectUnits(game.selectedUnits, scene);
+                            }
+                        }
+                        if (isRightClick(evt)) {
+                            var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh == game.ground; });
+                            if (pickInfo.hit) {
+                                var targetPos = pickInfo.pickedPoint;
+                                for (var index in game.selectedUnits) {
+                                    var unit = game.selectedUnits[index];
+                                    targetPos.y = unit.position.y;
+                                    unit.targetPositions = [targetPos];
+                                }
+                            }
                         }
                     }
                 }
@@ -404,6 +426,14 @@
             return selectedUnits;
         }
 
+        function get3DGroundPositionForScreenPosition(position) {
+            var pickInfo = scene.pick(position.x, position.y, function (mesh) { return mesh == game.ground; });
+            if (pickInfo.hit) {
+                return pickInfo.pickedPoint;
+            }
+            return null;
+        }
+
         function getBottomPositionOfMesh(mesh) {
             var pos = mesh.position.clone();
             var minimumPos = mesh.getBoundingInfo().boundingBox.minimumWorld;
@@ -457,6 +487,47 @@
             graphics2D.clear();
         }
 
+        function getSpriteFromPosition(sprites, position) {
+            for (var name in sprites) {
+                var sprite = sprites[name];
+                if (sprite.containsPoint(position)) {
+                    return sprite;
+                }
+            }
+            return null;
+        }
+
+        function hideEntities(entities) {
+            for (var index in entities) {
+                entities[index].visibility = false;
+            }
+        }
+
+        // =====
+        // Creating new entities
+        // =====
+
+        function createEntity(mesh, position) {
+            var unit = {
+                position : position,
+                targetPositions : [], // i.e. waypoints
+                maxVelocity : 100, // in 'blocks' per second
+                mesh : mesh
+            }
+            unit.mesh.unit = unit; // circular ref
+            unit.mesh.visibility = true;
+            game.entities.push(unit);
+        }
+
+        function prepareNewEntityPlacement(entityType) {
+            game.newEntityPlacement = {
+                placementInProgress : true,
+                entityType : entityType,
+                entity : game.entityPlacementMeshTemplates[entityType],
+                desiredPosition : null
+            }
+        }
+
         // =====
         // 3D rendering
         // =====
@@ -464,8 +535,8 @@
         	var currentRenderTime = window.performance.now();
         	var timeDiff = currentRenderTime - game.last3DRenderTime;
         	// Set positions
-        	for(var index in game.units) {
-        		var unit = game.units[index];
+        	for(var index in game.entities) {
+        		var unit = game.entities[index];
         		// See if unit needs to move
         		if (unit.targetPositions.length) {
         			var targetPosition = unit.targetPositions[0];
@@ -486,8 +557,8 @@
         	if (game.selectedUnits.length) {
         		var selectedUnit = game.selectedUnits[0];
         		// check if selected unit can see other units
-        		for(var index in game.units) {
-	        		var targetUnit = game.units[index];
+        		for(var index in game.entities) {
+	        		var targetUnit = game.entities[index];
 	        		if (targetUnit == selectedUnit) {
 	        			continue;
 	        		}
@@ -503,6 +574,16 @@
 	        		}
 	    		}
         	}
+            // Show placeholder for entity placement, if necessary
+            if (game.newEntityPlacement.placementInProgress) {
+                hideEntities(game.entityPlacementMeshTemplates);
+                var position3D = get3DGroundPositionForScreenPosition(game.mouseCurrentPosition);
+                if (position3D) {
+                    game.newEntityPlacement.entity.position = position3D;
+                    game.newEntityPlacement.entity.position.y = -1 * getBottomPositionOfMesh(game.newEntityPlacement.entity).y;
+                }
+                game.newEntityPlacement.entity.visibility = true;
+            }
         	// Store time
         	game.last3DRenderTime = currentRenderTime;
         	// Render
@@ -523,6 +604,19 @@
             if (!game.sidebarElements.fps) {
                 game.sidebarElements.fps = new PIXI.Text(babylon.fps, { font: '24px Verdana', fill: '#fff' });
                 game.sidebarElements.parent.addChild(game.sidebarElements.fps);
+            }
+            if (!game.sidebarElements.buttonsContainer) {
+                game.sidebarElements.buttonsContainer = new PIXI.Container();
+                game.sidebarElements.buttonsContainer.x = 10;
+                game.sidebarElements.buttonsContainer.y = 10;
+                game.sidebarElements.parent.addChild(game.sidebarElements.buttonsContainer);
+                // Add buttons
+                game.sidebarElements.buttons = {};
+                game.sidebarElements.buttons.newUnit = new PIXI.Sprite(PIXI.Texture.fromImage('./static/img/Button_new.png'));
+                game.sidebarElements.buttons.newUnit.interactive = true;
+                game.sidebarElements.buttons.newUnit.clickEventName = "newUnit";
+                game.sidebarElements.buttonsContainer.addChild(game.sidebarElements.buttons.newUnit);
+
             }
             game.sidebarElements.fps.text = "3D: " + Math.round(babylon.fps) + " fps";
         }
