@@ -84,6 +84,7 @@
             entities : [
 
             ],
+            shadowGenerator : null,
             ground : null,
             last3DRenderTime : window.performance.now()
         };
@@ -133,6 +134,13 @@
             camera.rotation.x = 0.3 * Math.PI; // look slight down
             
             // =====
+            // Shadow
+            // =====
+
+            game.shadowGenerator = new BABYLON.ShadowGenerator(2048, lights.sun);
+            game.shadowGenerator.useVarianceShadowMap = true;
+
+            // =====
             // Meshes
             // =====
 
@@ -141,13 +149,13 @@
             game.meshTemplates.unit = unitTemplate = BABYLON.Mesh.CreateBox("UnitTemplate", 10, scene);
             unitTemplate.material = unitTemplate.originalMaterial = game.materials.yellowMaterial;
             unitTemplate.visibility = false;
-            unitTemplate.selectable = true;
+            unitTemplate.selectable = false;
 
             var mainBuildingTemplate;
             game.meshTemplates.mainBuilding = mainBuildingTemplate = BABYLON.Mesh.CreateBox("MainBuildingTemplate", 20, scene);
             mainBuildingTemplate.material = mainBuildingTemplate.originalMaterial = game.materials.yellowMaterial;
             mainBuildingTemplate.visibility = false;
-            mainBuildingTemplate.selectable = true;
+            mainBuildingTemplate.selectable = false;
 
             var selectionRingTemplate;
             game.meshTemplates.selectionRing = selectionRingTemplate = BABYLON.Mesh.CreateDisc('SelectionRing', 15, 32, scene);
@@ -165,7 +173,7 @@
             // Create units
         	game.entities = [];
             for (var i = 0; i < 10; i++) {
-                var mesh = game.meshTemplates.unit.clone("unit " + game.entities.length);
+                var mesh = game.meshTemplates.unit.clone("entity " + game.entities.length);
                 var position = new BABYLON.Vector3(-i * 50, 5, 0);
             	var entity = createEntity(mesh, position);
             }
@@ -174,19 +182,13 @@
         	game.ground = BABYLON.Mesh.CreateGround("Ground", 1000, 1000, 1, scene, true);
         	game.ground.material = game.materials.groundMaterial;
         	game.ground.selectable = false;
-        	
-            // =====
-        	// Shadow
-            // =====
-
-        	var shadowGenerator = new BABYLON.ShadowGenerator(2048, lights.sun);
-        	for (var index in game.entities) {
-        		var unit = game.entities[index];
-        		shadowGenerator.getShadowMap().renderList.push(unit.mesh);	
-        	}
-        	shadowGenerator.useVarianceShadowMap = true;
         	game.ground.receiveShadows = true;
         	
+
+            // =====
+            // Some event that we don't use
+            // =====
+
             scene.registerBeforeRender(function () {
         		// ...
             });
@@ -286,7 +288,7 @@
                 } else {
                     if (game.newEntityPlacement.placementInProgress) {
                         hideEntities(game.entityPlacementMeshTemplates);
-                        var mesh = game.newEntityPlacement.entity.clone("unit " + game.entities.length);
+                        var mesh = game.newEntityPlacement.entity.clone("entity " + game.entities.length);
                         var targetPosition = game.newEntityPlacement.entity.position;
                         createEntity(mesh, targetPosition);
                         game.newEntityPlacement.entity.visibility = false;
@@ -300,6 +302,7 @@
                                 var pickInfo = scene.pick(evt.clientX, evt.clientY, function (mesh) { return mesh.selectable; });
                                 if (pickInfo.hit) {
                                     var currentMesh = pickInfo.pickedMesh;
+                                    console.log(currentMesh.name);
                                     var currentEntity = currentMesh.entity;
                                     game.selectedEntities = [currentEntity];
                                     selectEntities(game.selectedEntities, scene);
@@ -522,6 +525,8 @@
             }
             entity.mesh.entity = entity; // circular ref
             entity.mesh.visibility = true;
+            entity.mesh.selectable = true;
+            game.shadowGenerator.getShadowMap().renderList.push(entity.mesh);
             game.entities.push(entity);
         }
 
@@ -561,22 +566,22 @@
         	}
         	// Check visibility
         	if (game.selectedEntities.length) {
-        		var selectedUnit = game.selectedEntities[0];
+        		var selectedEntity = game.selectedEntities[0];
         		// check if selected unit can see other units
         		for(var index in game.entities) {
-	        		var targetUnit = game.entities[index];
-	        		if (targetUnit == selectedUnit) {
+	        		var targetEntity = game.entities[index];
+	        		if (targetEntity == selectedEntity) {
 	        			continue;
 	        		}
-	        		var directionVector = targetUnit.position.subtract(selectedUnit.position).normalize();
-	        		var ray = new BABYLON.Ray(selectedUnit.position, directionVector);
-	        		var pickInfo = scene.pickWithRay(ray, function(mesh) { return mesh.unit != null && mesh.unit != selectedUnit; });
-	        		if (pickInfo.hit && pickInfo.pickedMesh == targetUnit.mesh) {
+	        		var directionVector = targetEntity.position.subtract(selectedEntity.position).normalize();
+	        		var ray = new BABYLON.Ray(selectedEntity.position, directionVector);
+	        		var pickInfo = scene.pickWithRay(ray, function (mesh) { return mesh.entity != null && mesh.entity != selectedEntity; });
+	        		if (pickInfo.hit && pickInfo.pickedMesh == targetEntity.mesh) {
 	        			// Can see
-	        			targetUnit.mesh.material = game.materials.yellowMaterial;
+	        			targetEntity.mesh.material = game.materials.yellowMaterial;
 	        		} else {
 	        			// Can not see
-	        			targetUnit.mesh.material = game.materials.groundMaterial;
+	        			targetEntity.mesh.material = game.materials.groundMaterial;
 	        		}
 	    		}
         	}
