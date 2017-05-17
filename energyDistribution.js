@@ -33,6 +33,10 @@ class Node {
         this.energy -= energyAmount;
     }
 
+    produceEnergy(energyAmount) {
+        this.energy += energyAmount;
+    }
+
     calculateEnergyProduction(deltaTimeInMilliseconds) {
         if (!this.active) {
             return 0;
@@ -132,15 +136,18 @@ nodes.push(new Consumer(2,"cons2",24,24));
 nodes.push(new Consumer(3,"cons3",31,31));
 
 // 2. Execute a few ticks
-tick(nodes, 1000);
-nodes.forEach(function(elm, index) {
-    console.log(elm.name, elm.energy, elm.nodeConnectionsByIndex);
-});
-/*
-tick(nodes, 1000);
-console.log(nodes);
-tick(nodes, 1000);
-console.log(nodes);*/
+for(var index = 0; index < 5; index++) {
+    var startTime = new Date().getTime();
+    tick(nodes, 1000);
+    var endTime = new Date().getTime();
+    var algoDuration = endTime - startTime;
+    console.log("Duration of algorithm is " + algoDuration + "ms");
+
+    nodes.forEach(function(elm, index) {
+        //console.log(elm.name, elm.energy, elm.nodeConnectionsByIndex);
+        console.log(elm.name, elm.energy);
+    });
+}
 
 // =====
 // Private functions
@@ -156,6 +163,15 @@ function tick(nodesList, deltaTimeInMilliseconds) {
     nodesList.forEach(function(node, index) {
         node.consumeEnergy(node.calculateEnergyConsumption(deltaTimeInMilliseconds));
     });
+
+    // ===
+    // Energy production
+    // ===
+
+    nodesList.forEach(function(node, index) {
+        node.produceEnergy(node.calculateEnergyProduction(deltaTimeInMilliseconds));
+    });
+    
 
     // ===
     // Energy distribution
