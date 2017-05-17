@@ -35,11 +35,12 @@
 <body>
     <canvas id="renderCanvasBottom"></canvas>
     <canvas id="renderCanvasTop"></canvas>
-    <script src="/js/energia.js" />
     <script>
 
         // =====
-        // Init
+        // 
+        // MAIN
+        // 
         // =====
 
         var canvas = document.getElementById("renderCanvasBottom");
@@ -54,22 +55,45 @@
         window.graphics2D.clear();
         window.scene2D.addChild(window.graphics2D);
 
+        var game = {
+            selectedEntities : [],
+            selectionStartPosition: null,
+            selectionCurrentPosition: null,
+            selectionEndPosition : null,
+            selectionInProgress : false,
+            mouseCurrentPosition : null,
+            rubberBand: null,
+            rubberBandSelectionMesh: null,
+            rubberBandSelectionSquare: null,
+            newEntityPlacement : {
+                placementInProgress : false,
+                entityType : null,
+                entity : null,
+                desiredPosition : null
+            },
+            materials : [],
+            meshTemplates: {
+
+            },
+            entityPlacementMeshTemplates : {
+
+            },
+            sidebarElements: {
+
+            },
+            entities : [
+
+            ],
+            shadowGenerator : null,
+            ground : null,
+            last3DRenderTime : window.performance.now()
+        };
+
         // =====
-        // Start
+        // Init
         // =====
 
-        var options = {
-            babylon : 
-            pixi : 
-        }
-        game.start(options)
-
-        // =====
-        // 
-        // OLD STUFF
-        // 
-        // =====
-
+        var scene = createScene();
 
         // =====
         // Rendering loop
@@ -102,7 +126,74 @@
 
         function createScene() {
         
-      	    // =====
+            var lights = createLights(scene);
+            game.materials = createMaterials(scene);
+
+            window.camera = new BABYLON.FreeCamera("Camera", new BABYLON.Vector3(0, 400, -200), scene);
+            camera.rotation.y = 0; // look straigt forward
+            camera.rotation.x = 0.3 * Math.PI; // look slight down
+            
+            // =====
+            // Shadow
+            // =====
+
+            game.shadowGenerator = new BABYLON.ShadowGenerator(2048, lights.sun);
+            game.shadowGenerator.useVarianceShadowMap = true;
+
+            // =====
+            // Meshes
+            // =====
+
+            // Templates
+            var unitTemplate;
+            game.meshTemplates.unit = unitTemplate = BABYLON.Mesh.CreateBox("UnitTemplate", 10, scene);
+            unitTemplate.material = unitTemplate.originalMaterial = game.materials.yellowMaterial;
+            unitTemplate.visibility = false;
+            unitTemplate.selectable = false;
+
+            var mainBuildingTemplate;
+            game.meshTemplates.mainBuilding = mainBuildingTemplate = BABYLON.Mesh.CreateBox("MainBuildingTemplate", 20, scene);
+            mainBuildingTemplate.material = mainBuildingTemplate.originalMaterial = game.materials.yellowMaterial;
+            mainBuildingTemplate.visibility = false;
+            mainBuildingTemplate.selectable = false;
+
+            var selectionRingTemplate;
+            game.meshTemplates.selectionRing = selectionRingTemplate = BABYLON.Mesh.CreateDisc('SelectionRing', 15, 32, scene);
+            selectionRingTemplate.material = game.materials.selectionRingMaterial;;
+            selectionRingTemplate.position.y = 0.1;
+            selectionRingTemplate.rotation.x = Math.PI / 2;
+            selectionRingTemplate.receiveShadows = true;
+            selectionRingTemplate.visibility = false;
+            selectionRingTemplate.selectable = false;
+
+            game.entityPlacementMeshTemplates = {};
+            game.entityPlacementMeshTemplates.unit = game.meshTemplates.unit.clone("placementUnitTemplate");
+            game.entityPlacementMeshTemplates.mainBuilding = game.meshTemplates.mainBuilding.clone("placementMainBuildingTemplate");
+
+            // Create units
+        	game.entities = [];
+            for (var i = 0; i < 10; i++) {
+                var mesh = game.meshTemplates.unit.clone("entity " + game.entities.length);
+                var position = new BABYLON.Vector3(-i * 50, 5, 0);
+            	var entity = createEntity(mesh, position);
+            }
+        
+        	// Ground
+        	game.ground = BABYLON.Mesh.CreateGround("Ground", 1000, 1000, 1, scene, true);
+        	game.ground.material = game.materials.groundMaterial;
+        	game.ground.selectable = false;
+        	game.ground.receiveShadows = true;
+        	
+
+            // =====
+            // Some event that we don't use
+            // =====
+
+            scene.registerBeforeRender(function () {
+        		// ...
+            });
+        	
+            // =====
             // Event handling
             // =====
 
