@@ -1,0 +1,154 @@
+<html>
+    <head>
+        <style>
+            html, body { font: 14px arial; }
+            .nodes { width: 1200px; height: 302px; background: #eee; position: relative; }
+            .node { position: absolute; width: 10px; height: 10px; margin-top: -5px; margin-left: -5px; background: #aaa; }
+                .nodeCircle { position: absolute; border: 1px solid #ddd; margin-top: 5px; margin-left: 5px; }
+                .nodeContent { position: absolute; top: 10px; left: -5px; text-align: center; }
+            .node:hover .nodeCircle { border-color: #aaa; }
+        </style>
+        <script src="./core.js"></script>
+        <script>
+            
+            var Producer = core.classes.producer;
+            var Consumer = core.classes.consumer;
+            var NodeConnection = core.classes.nodeConnection;
+            var tick = core.tick;
+
+            // =====
+            // Main
+            // =====
+
+            var nodes = [];
+
+            function main() {
+                // 1. Prepare nodes
+                // TODO: create nodes by ID instead of using an Array
+                nodes.push(new Producer(0,"prod1",10,10));
+                nodes.push(new Consumer(1,"cons1",17,10));
+                nodes.push(new Consumer(2,"cons2",24,10));
+                nodes.push(new Consumer(3,"cons3",31,10));
+                //nodes.push(new Consumer(4,"disconnected",51,10));
+
+                // 2. Render the nodes
+                renderNodes(nodes);
+
+                // 3. Function for ticking
+                var interval;
+                window.resumeTicking = function() {
+                    interval = interval || setInterval(function() {
+                        var startTime = new Date().getTime();
+                        tick(nodes, 1000);
+                        var endTime = new Date().getTime();
+                        var algoDuration = endTime - startTime;
+                        console.log("Duration of algorithm is " + algoDuration + "ms");
+
+                        nodes.forEach(function(elm, index) {
+                            //console.log(elm.name, elm.energy, elm.nodeConnectionsByIndex);
+                            console.log(elm.name, elm.energy);
+                        });
+
+                        renderNodes(nodes);
+                    }, 1000);
+                }
+                window.pauseTicking = function() {
+                    clearInterval(interval);
+                    interval = null;
+                }
+
+                // =====
+                // Private functions
+                // =====
+
+                function renderNodes(nodeList) {
+                    var container1 = document.getElementById('nodesList1');
+                    container1.innerHTML = "";
+                    var zoomFactor = 15;
+                    for(var index in nodeList) {
+                        // Render node
+                        var node = nodeList[index];
+                        var diameter = node.signalRadius * 2;
+                        var div = document.createElement("div");
+                        div.classList.add('node');
+                        div.style.left = node.location.x * zoomFactor;
+                        div.style.top = node.location.y * zoomFactor;
+                        container1.appendChild(div);
+                            var circle = document.createElement("div");
+                            circle.style.width = (diameter * zoomFactor) + "px";
+                            circle.style.height = (diameter * zoomFactor) + "px";
+                            circle.style.left = (node.signalRadius * -1 * zoomFactor) + "px";
+                            circle.style.top = (node.signalRadius * -1 * zoomFactor) + "px";
+                            circle.style.borderRadius = (diameter * zoomFactor) + "px";
+                            circle.classList.add('nodeCircle');
+                            div.appendChild(circle);
+                                var content = document.createElement("div");
+                                content.innerHTML = node.energy;
+                                content.classList.add('nodeContent');
+                                div.appendChild(content);
+                        // Render nodeConnections
+                        for(var index in node.nodeConnectionsByIndex) {
+                            // Only draw the positive flows
+                            var connection = node.nodeConnectionsByIndex[index];
+                            if (connection.energyDistributions.total == 0 || connection.energyDistributions.total > 0) {
+                                var line = createLine(node.location.x * zoomFactor, node.location.y * zoomFactor, connection.targetNode.location.x * zoomFactor, connection.targetNode.location.y * zoomFactor);
+                                line.innerHTML = '<span style="padding-left: ' + (connection.distance * zoomFactor / 2) + 'px;">' + connection.energyDistributions.total + '</span>';
+                                line.classList.add('connection');
+                                container1.appendChild(line);
+                            }
+                        }
+                    }
+                }
+
+                function createLineElement(x, y, length, angle) {
+                    var line = document.createElement("div");
+                    var styles = 'border: 1px solid black; '
+                            + 'width: ' + length + 'px; '
+                            + 'height: 0px; '
+                            + '-moz-transform: rotate(' + angle + 'rad); '
+                            + '-webkit-transform: rotate(' + angle + 'rad); '
+                            + '-o-transform: rotate(' + angle + 'rad); '  
+                            + '-ms-transform: rotate(' + angle + 'rad); '  
+                            + 'position: absolute; '
+                            + 'top: ' + y + 'px; '
+                            + 'left: ' + x + 'px; ';
+                    line.setAttribute('style', styles);  
+                    return line;
+                }
+
+                function createLine(x1, y1, x2, y2) {
+                    var a = x1 - x2,
+                        b = y1 - y2,
+                        c = Math.sqrt(a * a + b * b);
+
+                    var sx = (x1 + x2) / 2,
+                        sy = (y1 + y2) / 2;
+
+                    var x = sx - c / 2,
+                        y = sy;
+
+                    var alpha = Math.PI - Math.atan2(-b, a);
+
+                    return createLineElement(x, y, c, alpha);
+                }
+
+            }
+
+        </script>
+    </head>
+    <body onload='main();'>
+        <div>
+            <button onclick="resumeTicking();">start / resume</button>
+            <button onclick="pauseTicking();">pause</button>
+        </div>
+        <br />
+        <h3>Straight line</h3>
+        <div class='nodes' id='nodesList1'>
+
+        </div>
+        <h3>Double line</h3>
+        <div class='nodes' id='nodesList2'>
+
+        </div>
+    </body>
+</html>
