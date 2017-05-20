@@ -40,7 +40,7 @@
             this.signalPower = signalPower;
             this.signalRadius = signalRadius;
             this.active = true;
-            this.nodeConnectionsByIndex = {};
+            this.nodeConnectionsById = {};
             this.networkId = null; // the ID of the network that this node is part of
         }
 
@@ -73,8 +73,8 @@
         getNodeConnectionsWithUnconfirmedEnergyDistributions() {
             var nodes = [];
             var self = this;
-            Object.keys(this.nodeConnectionsByIndex).forEach(function(targetIndex) {
-                var nodeConnection = self.nodeConnectionsByIndex[targetIndex];
+            Object.keys(this.nodeConnectionsById).forEach(function(targetId) {
+                var nodeConnection = self.nodeConnectionsById[targetId];
                 if (!nodeConnection.energyDistributions.confirmed) {
                     nodes.push(nodeConnection);
                 }
@@ -104,13 +104,14 @@
                 10,
                 10
             );
+            this.energyProductionPerSecond = 100;
         }
 
         calculateEnergyProduction(deltaTimeInMilliseconds) {
             if (!this.active) {
                 return 0;
             }
-            return 100 * (deltaTimeInMilliseconds/1000) ; // TODO: make energy production also dependent on resources that the Producer has
+            return this.energyProductionPerSecond * (deltaTimeInMilliseconds/1000) ; // TODO: make energy production also dependent on resources that the Producer has
         }
     }
     core.classes.producer = Producer;
@@ -135,6 +136,26 @@
     }
     core.classes.consumer = Consumer;
 
+    class Relay extends Node {
+        constructor(id,name,x,y) {
+            super(
+                id,
+                name,
+                x,
+                y,
+                500, 
+                0,
+                10,
+                10
+            );
+        }
+
+        calculateEnergyProduction(deltaTimeInMilliseconds) {
+            return 0;
+        }
+    }
+    core.classes.relay = Relay;
+
     class NodeConnection {
         constructor(sourceNode, targetNode, distance) {
             this.sourceNode = sourceNode;
@@ -158,6 +179,7 @@
             this.nodes = [];
             this.averageEnergyPosition = null;
             this.uncheckedNodeConnectionsThatHaveConfirmedEnergyDistribution = [];
+            this.energyNotDistributed = 0;
         }
     }
     core.classes.network = Network;
@@ -167,6 +189,14 @@
     // =====
 
     core.tick = function tick(nodesList, deltaTimeInMilliseconds) {
+
+        // ===
+        // Make map of nodes
+        // ===
+        var nodesById = {};
+        nodesList.forEach(function(node) {
+            nodesById[node.id] = node;
+        });
 
         // ===
         // Energy consumption
@@ -194,13 +224,13 @@
         // Yay, very inefficiënt algorithm
         // TODO: make this cached and only change the network topology when a specific trigger gives reason to do so: e.g. a moving unit, a new building, etc
         nodesList.forEach(function(sourceNode, sourceIndex) {
-            sourceNode.nodeConnectionsByIndex = {};
+            sourceNode.nodeConnectionsById = {};
             sourceNode.networkId = null;
             nodesList.forEach(function(targetNode, targetIndex) {
                 if (sourceNode !== targetNode) {
                     var distance = calculateDistance(sourceNode, targetNode);
                     if (distance < sourceNode.signalRadius) {
-                        sourceNode.nodeConnectionsByIndex[targetIndex] = new NodeConnection(
+                        sourceNode.nodeConnectionsById[targetNode.id] = new NodeConnection(
                             sourceNode,
                             targetNode,
                             distance
@@ -225,20 +255,18 @@
                 networks.push(network);
                 node.networkId = networkIdCounter;
                 network.nodes.push(node);
-                if (node.nodeConnectionsByIndex) {
-                    assignConnectionsToNetwork(node.nodeConnectionsByIndex);
+                if (node.nodeConnectionsById) {
+                    assignConnectionsToNetwork(node.nodeConnectionsById);
                 }
-                // TODO: prevent infinite loop problem :-)
-                // Only go to nodes that don't have a network ID!
-                function assignConnectionsToNetwork(connectionsByIndex) {
-                    Object.keys(connectionsByIndex).forEach(function(targetIndex) {
-                        var nodeConnection = connectionsByIndex[targetIndex];
+                function assignConnectionsToNetwork(connectionsById) {
+                    Object.keys(connectionsById).forEach(function(targetIndex) {
+                        var nodeConnection = connectionsById[targetIndex];
                         var targetNode = nodeConnection.targetNode;
                         if (!targetNode.networkId) {
                             targetNode.networkId = networkIdCounter;
                             network.nodes.push(targetNode);
-                            if (targetNode.nodeConnectionsByIndex) {
-                                assignConnectionsToNetwork(targetNode.nodeConnectionsByIndex);
+                            if (targetNode.nodeConnectionsById) {
+                                assignConnectionsToNetwork(targetNode.nodeConnectionsById);
                             }
                         }
                     });
@@ -250,12 +278,12 @@
         networks.forEach(function(network, index) {
             var cumulativeEnergyPosition = 0;
             network.nodes.forEach(function(node, index) {
-                console.log("Energy position of node " + index + " is " + node.calulateEnergyPosition());
+                //console.log("Energy position of node " + index + " is " + node.calulateEnergyPosition());
                 cumulativeEnergyPosition += node.calulateEnergyPosition();
             });
             network.averageEnergyPosition = cumulativeEnergyPosition / network.nodes.length;
         });
-        console.log(networks);
+        //console.log(networks);
 
         // Step 4: act as if the energy network is like connected tubes with sticky goo.
         // Every node has an upright tube with the surplus goo (everything above average) pushing down into the network
@@ -265,20 +293,20 @@
         var biggestEnergyChange = 0;
         networks.forEach(function(network, index) {
             // First, calculate a general distribution of the available energy to connected nodes
-            network.nodes.forEach(function(sourceNode, sourceIndex) {
+            network.nodes.forEach(function(sourceNode) {
                 // Calculate energy to distribute to the network
                 var energyToDistribute = sourceNode.calulateEnergyPosition() - network.averageEnergyPosition;
-                console.log("Energy to distribute for node " + sourceIndex + " is " + energyToDistribute);
+                //console.log("Energy to distribute for node " + sourceNode.id + " is " + energyToDistribute);
                 // Create energy streams to every connected node
-                var amountOfNodesToDistributeTo = Object.keys(sourceNode.nodeConnectionsByIndex).length;
+                var amountOfNodesToDistributeTo = Object.keys(sourceNode.nodeConnectionsById).length;
                 var energyToDistributeToEveryNode = energyToDistribute / amountOfNodesToDistributeTo;
                 if (energyToDistributeToEveryNode > biggestEnergyChange) {
                     biggestEnergyChange = energyToDistributeToEveryNode;
                 }
-                console.log("The amount to distribute to every connected node is " + energyToDistributeToEveryNode);
+                //console.log("The amount to distribute to every connected node is " + energyToDistributeToEveryNode);
                 // Loop over sourceNode nodeConnections
-                Object.keys(sourceNode.nodeConnectionsByIndex).forEach(function(targetIndex) {
-                    var nodeConnection = sourceNode.nodeConnectionsByIndex[targetIndex];
+                Object.keys(sourceNode.nodeConnectionsById).forEach(function(targetId) {
+                    var nodeConnection = sourceNode.nodeConnectionsById[targetId];
                     // Set from sourceNode -> targetNode
                     if (amountOfNodesToDistributeTo == 1) {
                         nodeConnection.energyDistributions.confirmed = true;
@@ -287,14 +315,14 @@
                     } else {
                         nodeConnection.energyDistributions.total += energyToDistributeToEveryNode;
                     }
-                    nodeConnection.energyDistributions.distributionsByOriginalSourceNode[sourceIndex] = {
+                    nodeConnection.energyDistributions.distributionsByOriginalSourceNode[sourceNode.id] = {
                         originalSourceNode: sourceNode,
                         energy: energyToDistributeToEveryNode,
                         confirmed: (amountOfNodesToDistributeTo == 1 ? true : false) // a distribution is confirmed if we *know* that this amount is coming to the targetNode
                     }
                     // Also set reverse on targetNode -> sourceNode
                     // Except if that nodeConnection is already confirmed; then don't touch it
-                    var targetNodeConnection = nodeConnection.targetNode.nodeConnectionsByIndex[sourceIndex];
+                    var targetNodeConnection = nodeConnection.targetNode.nodeConnectionsById[sourceNode.id];
                     if (!targetNodeConnection.energyDistributions.confirmed) {
                         if (amountOfNodesToDistributeTo == 1) {
                             targetNodeConnection.energyDistributions.confirmed = true;
@@ -303,7 +331,7 @@
                         } else {
                             targetNodeConnection.energyDistributions.total -= energyToDistributeToEveryNode;
                         }
-                        targetNodeConnection.energyDistributions.distributionsByOriginalSourceNode[sourceIndex] = {
+                        targetNodeConnection.energyDistributions.distributionsByOriginalSourceNode[sourceNode.id] = {
                             originalSourceNode: sourceNode,
                             energy: energyToDistributeToEveryNode * -1,
                             confirmed: (amountOfNodesToDistributeTo == 1 ? true : false) // a distribution is confirmed if we *know* that this amount is coming to the targetNode
@@ -322,8 +350,8 @@
             while(network.uncheckedNodeConnectionsThatHaveConfirmedEnergyDistribution.length > 0) {
                 var uncheckedNodeConnection = network.uncheckedNodeConnectionsThatHaveConfirmedEnergyDistribution.shift();
                 // First, ensure that the connection from targetNode *back* to sourceNode is updated so that it contains the proper total
-                uncheckedNodeConnection.targetNode.nodeConnectionsByIndex[uncheckedNodeConnection.sourceNode.id].energyDistributions.confirmed = true;
-                uncheckedNodeConnection.targetNode.nodeConnectionsByIndex[uncheckedNodeConnection.sourceNode.id].energyDistributions.total = uncheckedNodeConnection.energyDistributions.total * -1;
+                uncheckedNodeConnection.targetNode.nodeConnectionsById[uncheckedNodeConnection.sourceNode.id].energyDistributions.confirmed = true;
+                uncheckedNodeConnection.targetNode.nodeConnectionsById[uncheckedNodeConnection.sourceNode.id].energyDistributions.total = uncheckedNodeConnection.energyDistributions.total * -1;
                 // Now check whether this confirmed nodeConnection causes the connected targetNode to have only 1 unconfirmed energyDistribution left
                 // Which would mean the energyDistributions for the targetNode can also be confirmed
                 var nodeConnectionsOfTargetNodeToDistributeTo = uncheckedNodeConnection.targetNode.getNodeConnectionsWithUnconfirmedEnergyDistributions();
@@ -333,8 +361,8 @@
                     nodeConnection.energyDistributions.confirmed = true;
                     // The total energy of that outgoing connection from targetNode is going to be the incoming energy of targetNode + whatever energy targetNode should be distributing/getting
                     nodeConnection.energyDistributions.total = uncheckedNodeConnection.energyDistributions.total + (uncheckedNodeConnection.targetNode.calulateEnergyPosition() - network.averageEnergyPosition);
-                    nodeConnection.targetNode.nodeConnectionsByIndex[nodeConnection.sourceNode.id].confirmed = true;
-                    nodeConnection.targetNode.nodeConnectionsByIndex[nodeConnection.sourceNode.id].total = nodeConnection.energyDistributions.total * -1;
+                    nodeConnection.targetNode.nodeConnectionsById[nodeConnection.sourceNode.id].confirmed = true;
+                    nodeConnection.targetNode.nodeConnectionsById[nodeConnection.sourceNode.id].total = nodeConnection.energyDistributions.total * -1;
                     // Now ensure that we also check this newly confirmed nodeConnection for forward confirmation
                     network.uncheckedNodeConnectionsThatHaveConfirmedEnergyDistribution.push(nodeConnection);
                 }
@@ -349,13 +377,21 @@
         //
 
         // Lastly, execute the energyDistribution and add/subtract from the energy levels of the nodes
-        nodesList.forEach(function(sourceNode, sourceIndex) {
-            // Loop over sourceNode nodeConnections
-            Object.keys(sourceNode.nodeConnectionsByIndex).forEach(function(targetIndex) {
-                var nodeConnection = sourceNode.nodeConnectionsByIndex[targetIndex];
-                sourceNode.energy -= nodeConnection.energyDistributions.total;
+        var totalDistribution = 0;
+        networks.forEach(function(network, index) {
+            network.energyNotDistributed = 0;
+            // First, calculate a general distribution of the available energy to connected nodes
+            network.nodes.forEach(function(sourceNode) {
+                // Loop over sourceNode nodeConnections
+                Object.keys(sourceNode.nodeConnectionsById).forEach(function(targetId) {
+                    var nodeConnection = sourceNode.nodeConnectionsById[targetId];
+                    sourceNode.energy -= nodeConnection.energyDistributions.total;
+                });
+                // Check how much energy was NOT distributed
+                network.energyNotDistributed += Math.abs(network.averageEnergyPosition - sourceNode.calulateEnergyPosition());
             });
         });
+        console.log(networks);
 
     }
 

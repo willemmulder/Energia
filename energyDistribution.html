@@ -2,7 +2,7 @@
     <head>
         <style>
             html, body { font: 14px arial; }
-            .nodes { width: 1200px; height: 302px; background: #eee; position: relative; }
+            .nodes { width: 100%; height: 802px; background: #eee; position: relative; }
             .node { position: absolute; width: 10px; height: 10px; margin-top: -5px; margin-left: -5px; background: #aaa; }
                 .nodeCircle { position: absolute; border: 1px solid #ddd; margin-top: 5px; margin-left: 5px; }
                 .nodeContent { position: absolute; top: 10px; left: -5px; text-align: center; }
@@ -13,6 +13,7 @@
             
             var Producer = core.classes.producer;
             var Consumer = core.classes.consumer;
+            var Relay = core.classes.relay;
             var NodeConnection = core.classes.nodeConnection;
             var tick = core.tick;
 
@@ -25,11 +26,25 @@
             function main() {
                 // 1. Prepare nodes
                 // TODO: create nodes by ID instead of using an Array
+                // Network 1
                 nodes.push(new Producer(0,"prod1",10,10));
                 nodes.push(new Consumer(1,"cons1",17,10));
                 nodes.push(new Consumer(2,"cons2",24,10));
                 nodes.push(new Consumer(3,"cons3",31,10));
+                // Disconnected node
                 nodes.push(new Consumer(4,"disconnected",51,10));
+                // More complicated network
+                var prod2 = new Producer(5,"prod2",10,40);
+                prod2.energyProductionPerSecond = 20; // it also has 10 consumption, so effectively generating 10 energy
+                nodes.push(prod2);
+                nodes.push(new Relay(6,"relay1",17,36));
+                nodes.push(new Relay(7,"relay2",24,36));
+                nodes.push(new Relay(8,"relay3",31,36));
+                nodes.push(new Relay(9,"relay4",17,44));
+                nodes.push(new Relay(10,"relay5",24,44));
+                nodes.push(new Relay(11,"relay6",31,44));
+                nodes.push(new Relay(12,"relay7",38,40));
+                nodes.push(new Consumer(13,"cons4",44,40));
 
                 // 2. Render the nodes
                 renderNodes(nodes);
@@ -43,12 +58,6 @@
                         var endTime = new Date().getTime();
                         var algoDuration = endTime - startTime;
                         console.log("Duration of algorithm is " + algoDuration + "ms");
-
-                        nodes.forEach(function(elm, index) {
-                            //console.log(elm.name, elm.energy, elm.nodeConnectionsByIndex);
-                            console.log(elm.name, elm.energy);
-                        });
-
                         renderNodes(nodes);
                     }, 1000);
                 }
@@ -64,7 +73,7 @@
                 function renderNodes(nodeList) {
                     var container1 = document.getElementById('nodesList1');
                     container1.innerHTML = "";
-                    var zoomFactor = 15;
+                    var zoomFactor = 10;
                     nodeList.forEach(function(node, index) {
                         // Render node
                         var diameter = node.signalRadius * 2;
@@ -82,16 +91,16 @@
                             circle.classList.add('nodeCircle');
                             div.appendChild(circle);
                                 var content = document.createElement("div");
-                                content.innerHTML = node.energy;
+                                content.innerHTML = Math.round(node.energy);
                                 content.classList.add('nodeContent');
                                 div.appendChild(content);
                         // Render nodeConnections
-                        Object.keys(node.nodeConnectionsByIndex).forEach(function(connectionIndex) {
-                            var connection = node.nodeConnectionsByIndex[connectionIndex];
+                        Object.keys(node.nodeConnectionsById).forEach(function(nodeId) {
+                            var connection = node.nodeConnectionsById[nodeId];
                             // Only draw the positive flows
                             if (connection.energyDistributions.total == 0 || connection.energyDistributions.total > 0) {
                                 var line = createLine(node.location.x * zoomFactor, node.location.y * zoomFactor, connection.targetNode.location.x * zoomFactor, connection.targetNode.location.y * zoomFactor);
-                                line.innerHTML = '<span style="padding-left: ' + (connection.distance * zoomFactor / 2) + 'px;">' + connection.energyDistributions.total + '</span>';
+                                line.innerHTML = '<span style="padding-left: ' + (connection.distance * zoomFactor / 2) + 'px;">' + Math.round(connection.energyDistributions.total) + '</span>';
                                 line.classList.add('connection');
                                 container1.appendChild(line);
                             }
@@ -141,12 +150,8 @@
             <button onclick="pauseTicking();">pause</button>
         </div>
         <br />
-        <h3>Straight line</h3>
+        <h3>Network examples</h3>
         <div class='nodes' id='nodesList1'>
-
-        </div>
-        <h3>Double line</h3>
-        <div class='nodes' id='nodesList2'>
 
         </div>
     </body>
