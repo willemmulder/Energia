@@ -29,7 +29,7 @@
                 nodes.push(new Consumer(1,"cons1",17,10));
                 nodes.push(new Consumer(2,"cons2",24,10));
                 nodes.push(new Consumer(3,"cons3",31,10));
-                //nodes.push(new Consumer(4,"disconnected",51,10));
+                nodes.push(new Consumer(4,"disconnected",51,10));
 
                 // 2. Render the nodes
                 renderNodes(nodes);
@@ -65,9 +65,8 @@
                     var container1 = document.getElementById('nodesList1');
                     container1.innerHTML = "";
                     var zoomFactor = 15;
-                    for(var index in nodeList) {
+                    nodeList.forEach(function(node, index) {
                         // Render node
-                        var node = nodeList[index];
                         var diameter = node.signalRadius * 2;
                         var div = document.createElement("div");
                         div.classList.add('node');
@@ -87,17 +86,17 @@
                                 content.classList.add('nodeContent');
                                 div.appendChild(content);
                         // Render nodeConnections
-                        for(var index in node.nodeConnectionsByIndex) {
+                        Object.keys(node.nodeConnectionsByIndex).forEach(function(connectionIndex) {
+                            var connection = node.nodeConnectionsByIndex[connectionIndex];
                             // Only draw the positive flows
-                            var connection = node.nodeConnectionsByIndex[index];
                             if (connection.energyDistributions.total == 0 || connection.energyDistributions.total > 0) {
                                 var line = createLine(node.location.x * zoomFactor, node.location.y * zoomFactor, connection.targetNode.location.x * zoomFactor, connection.targetNode.location.y * zoomFactor);
                                 line.innerHTML = '<span style="padding-left: ' + (connection.distance * zoomFactor / 2) + 'px;">' + connection.energyDistributions.total + '</span>';
                                 line.classList.add('connection');
                                 container1.appendChild(line);
                             }
-                        }
-                    }
+                        });
+                    });
                 }
 
                 function createLineElement(x, y, length, angle) {
