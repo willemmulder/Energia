@@ -41,6 +41,8 @@
             this.signalRadius = signalRadius;
             this.active = true;
             this.nodeConnectionsById = {};
+            this.energyToDistribute = 0;
+            this.incomingEnergy = 0;
             this.networkId = null; // the ID of the network that this node is part of
         }
 
@@ -164,7 +166,6 @@
             this.energyDistributions = {
                 total: 0,
                 confirmed: false, // a flow is confirmed if we *know* that this amount is going to/from the targetNode
-                distributionsByOriginalSourceNode: {}
             };
         }
         calculateEffectiveSignalStrength() {
@@ -292,62 +293,88 @@
 
         // Pressure from every node is distributed over the network
 
-        // As a first step, we simply distribute the energy pushing (or pulling) evenly over all connected nodes
-        // For example the 1st node has +10 energy and two connected nodes, then every connected node will receive 5 energy
-        // Then we will do node two, three, etc etc
-        // For every connection that we touch we will immediately add or subtract any existing energy flows over that connection
-        // For example if node 1 pushed 5 energy to node 2, and node 2 pushes 3 energy to node 1, we will balance this out so that in effect node 1 pushes 2 energy to node 2
-
-        // For every connection we keep track whether it has > 1 energy flowing through it
-
-        // So in general
-        // 1. Distribute energy from all nodes to their direct connections, taking into account reverse energy flows (as described above)
-        // 2. In a loop: 
-        //    a) for all nodes that have only one unconfirmed energy-connection, confirm that connection and check the connected node as well
-        //    b) for all connections that distribute > 1 energy, redistribute that energy to further nodes. Once distributed energy drops < 1, remove from the list. Once it gets > 1, add it do the list again.
-
-        var biggestEnergyChange = 0;
         networks.forEach(function(network, index) {
-            var nodesWithUnconfirmedEnergyDistribution = network.nodes.slice();
-            while(nodesWithUnconfirmedEnergyDistribution.length > 0) {
-                var unconfirmedNode = nodesWithUnconfirmedEnergyDistribution.shift();
-                // First process incoming and outgoing energyDistributions and balance them
-                // e.g. +10 incoming and we have -10 outgoing, ... then what?
-                // or if we have +10 incoming and we have +10 outgoing, ... then what?
+            
+            // A 
+            // First, we calculte how much energy every node has to distribute this turn, initially
+            network.nodes.forEach(function(node) {
                 // Calculate energy to distribute to the network
-                var energyToDistribute = unconfirmedNode.calulateEnergyPosition() - network.averageEnergyPosition;
-                // Check if we can make an EnergyDistribution confirmed
-                // If so, move our energy over to the targetNode and mark the node as 'unconfirmed'
-                // Get connections to distribute energy to (which are the ones that are not yet confirmed)
-                function distributeToNodeConnections(originalSourceNode, currentSourceNode, currentEnergyToDistribute) {
-                    // Create energy streams to only those connected nodes that are not already pushing energy from originalSourceNode to us
-                    var nodeConnectionsToDistributeTo = [];
-                    Object.keys(currentSourceNode.nodeConnectionsById).forEach(function(targetId) {
-                        var nodeConnection = currentSourceNode.nodeConnectionsById[targetId];
-                        // Check if there is not already a reverse nodeConnection
-                        // TODO: !!!! IMPORTANT !!!! 
-                        // What to do IF there is a reverse nodeConnection? Do we cancel it out? Do we ignore? What do we do?
-                        if (!nodeConnection.targetNode.nodeConnectionsById[currentSourceNode.id].energyDistributions.distributionsByOriginalSourceNode[originalSourceNode.id]) {
-                            nodeConnectionsToDistributeTo.push(nodeConnection);
-                        }
-                    });
-                    // Calculate energy to distribute, per node
-                    var energyToDistributeToEveryNode = currentEnergyToDistribute / nodeConnectionsToDistributeTo.length;
-                    // Distribute
-                    if (energyToDistributeToEveryNode > 1) {
-                        nodeConnectionsToDistributeTo.forEach(function(nodeConnection) {
-                            nodeConnection.energyDistributions.total += energyToDistributeToEveryNode;
-                            nodeConnection.energyDistributions.distributionsByOriginalSourceNode[originalSourceNode.id] = {
-                                originalSourceNode: originalSourceNode,
-                                energy: energyToDistributeToEveryNode
-                            }
-                            distributeToNodeConnections(originalSourceNode, sourceNode, currentEnergyToDistribute);
-                        });
-                    }
+                var energyToDistribute = node.calulateEnergyPosition() - network.averageEnergyPosition;
+                node.incomingEnergy = energyToDistribute;
+            });
+
+            // B
+            // Create a list with nodes that we care about
+            // Once a node has a confirmed energydistribution, we will not take it into account anymore
+            var nodesWithUnconfirmedEnergyDistribution = network.nodes.slice();
+            function confirmNode(someNode) {
+                var index = nodesWithUnconfirmedEnergyDistribution.indexOf(someNode);
+                if (index > -1) {
+                    nodesWithUnconfirmedEnergyDistribution = nodesWithUnconfirmedEnergyDistribution.splice(index, 1);
                 }
-                distributeToNodeConnections(sourceNode, sourceNode, energyToDistribute);
             }
-        });
+
+            // C
+            // We check which nodes do have a confirmed energy distribution
+            // If one becomes confirmed, then push its energy to the targetNode
+            checkSuspectNodesIfEnergyDistributionCanBeConfirmed(network.nodes.slice());
+            function checkSuspectNodesIfEnergyDistributionCanBeConfirmed(suspectNodeList) {
+                while(suspectNodeList.length > 0) {
+                    var suspectNode = suspectNodeList.shift();
+                    
+                }
+                
+            }
+
+            // D
+            // Now simply distribute the energy pushing (or pulling) evenly over all connected nodes
+            // For example the 1st node has +10 energy and two connected nodes, then every connected node will receive 5 energy
+            // Then we will do node two, three, etc etc
+            // We do this by looping:
+            //    a) for all nodes that have only one unconfirmed energy-connection, confirm that connection and check the connected node as well
+            //    b) for all connections that distribute > 1 energy, redistribute that energy to further nodes. Once distributed energy drops < 1, remove from the list. Once it gets > 1, add it do the list again.
+            while(nodesWithUnconfirmedEnergyDistribution.length > 0) {
+                // First for all nodes set incoming energy to outgoing energy
+                nodesWithUnconfirmedEnergyDistribution.forEach(function(node) {
+                    node.energyToDistribute = node.incomingEnergy;
+                    node.incomingEnergy = 0;
+                });
+                // Then process all the outgoing energy per node and add them to the ingoing energy of the connected nodes
+                nodesWithUnconfirmedEnergyDistribution.forEach(function(node) {
+                    var unconfirmedConnections = node.getNodeConnectionsWithUnconfirmedEnergyDistributions();
+                    // If there is only one unconfirmed nodeConnection, then we know for sure all our energy has to go there
+                    // So we can calculate that and then confirm that one nodeConnection
+                    if (unconfirmedConnections.length == 1) {
+                        // Confirm node
+                        confirmNode(node);
+                        // Confirm the energy distribution of the relevant connection
+                        var unconfirmedConnection = unconfirmedConnections[0];
+                        unconfirmedConnection.energyDistributions.confirmed = true;
+                        // We need to push all energy we still have to distribute to the one connected node
+                        // That is all energy that was already planned to be distributed, plus anything that we might have *received* from our nodeConnection this round
+                        node.energyToDistribute += node.incomingEnergy;
+                        // Now push
+                        unconfirmedConnection.energyDistributions.total += node.energyToDistribute;
+                        unconfirmedConnection.targetNode.incomingEnergy += node.energyToDistribute;
+                        unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.total -= node.energyToDistribute;
+                    } else {
+                        // Calculate energy to distribute, per node
+                        var energyToDistributeToEveryNode = node.energyToDistribute / unconfirmedConnections.length;
+                        // Distribute
+                        if (energyToDistributeToEveryNode > 1) {
+                            unconfirmedConnections.forEach(function(unconfirmedConnection) {
+                                unconfirmedConnection.energyDistributions.total += energyToDistributeToEveryNode;
+                                unconfirmedConnection.targetNode.incomingEnergy += energyToDistributeToEveryNode;
+                                unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.total -= energyToDistributeToEveryNode;
+                            });
+                        } else {
+                            // TODO: if all nodes distribute < 1, then break
+                        }
+                    }
+                }); // end of nodes
+            } // end of while
+
+        }); // end of networks
         
         // Step 5: execute the energyDistribution and add/subtract from the energy levels of the nodes
         var totalDistribution = 0;
