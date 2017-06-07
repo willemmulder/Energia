@@ -284,7 +284,7 @@
             });
             network.averageEnergyPosition = cumulativeEnergyPosition / network.nodes.length;
         });
-        //console.log(networks);
+        console.log(networks);
 
         // Step 4: act as if the energy network is like connected tubes with sticky goo.
         // Every node has an upright tube with the surplus goo (everything above average) pushing down into the network or a hole for goo to stream into
@@ -312,6 +312,7 @@
             var nodesToProcess = network.nodes.slice();
             function removeNodeFromListToProcess(someNode) {
                 var index = nodesToProcess.indexOf(someNode);
+                console.log('index to remove is ' + index, someNode, nodesToProcess);
                 if (index > -1) {
                     nodesToProcess.splice(index, 1);
                 }
@@ -346,13 +347,19 @@
             while(nodesToProcess.length > 0) {
                 // First for all nodes set incoming energy to outgoing energy
                 nodesToProcess.forEach(function(node) {
-                    console.log('Setting energy to distribute ', node.incomingEnergy);
+                    console.log('Setting energy to distribute ', node.energyToDistribute, node.incomingEnergy);
+                    // We add the incoming energy to any possibly not yet distributed energy
+                    // This latter can happen because we do not distribute negative energy; so nodes with a negative energyToDistribute will remain like that after a round
                     node.energyToDistribute += node.incomingEnergy;
                     node.incomingEnergy = 0;
                 });
                 // Then process all the outgoing energy per node and add them to the ingoing energy of the connected nodes
-                nodesToProcess.forEach(function(node) {
+                // Note: do not use forEach when we also delete items from that same list during the loop. It will results in crazyness.
+                // So we use a simple backwards loop here
+                for(var nodeIndex = nodesToProcess.length-1; nodeIndex >= 0; nodeIndex--) {
+                    var node = nodesToProcess[nodeIndex];
                     var unconfirmedConnections = node.getNodeConnectionsWithUnconfirmedEnergyDistributions();
+                    console.log('processing node', node, unconfirmedConnections);
                     // If there is only one unconfirmed nodeConnection, then we know for sure all our energy has to go there
                     // So we can calculate that and then confirm that one nodeConnection
                     if (unconfirmedConnections.length == 0) {
@@ -382,7 +389,9 @@
                         }
                         unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.total -= node.energyToDistribute;
                     } else {
-                        // Check how much energy there is to distribute
+                        // Distribute to all connected (unconfirmed) nodes
+                        // We only redistribute energy there is >1 energy to distribute
+                        // NOTE: here we only distribute positive energy, not negative energy
                         if (node.energyToDistribute > 1) {
                             // Calculate energy to distribute, per node
                             var energyToDistributeToEveryNode = node.energyToDistribute / unconfirmedConnections.length;
@@ -398,18 +407,21 @@
                                 unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.total -= energyToDistributeToEveryNode;
                             });
                         } else {
+                            // There is less < 1 energy to distribute. 
+                            // That is not significatn enough to process this node any further
+                            // If this node also has no incoming energy to process, we remove it from list that we care about
+                            // It can be placed back on the list once the node receives incoming energy again
                             if (node.incomingEnergy == 0) {
-                                // Remove from list that we care about, until the node has received enough incoming energy again
-                                console.log('removing because not enough energy to distribute', node);
+                                console.log('removing because it does not require any further processing for now', node);
                                 removeNodeFromListToProcess(node);
                             }
                         }
                     }
-                }); // end of nodes
+                } // end of nodes
                 console.log('round for network ', networkIndex, nodesToProcess.length);
                 console.log(networkIndex, nodesToProcess[0]);
                 counter++;
-                if (counter == 10) {
+                if (counter == 2) {
                     break;
                 }
             } // end of while
