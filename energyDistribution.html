@@ -33,6 +33,15 @@
                 nodes.push(new Consumer(3,"cons3",31,10));
                 // Disconnected node
                 nodes.push(new Consumer(4,"disconnected",51,10));
+                // Network with split from producer into two lines
+                nodes.push(new Producer(0,"prod2",110,20));
+                nodes.push(new Relay(1,"relay21",110,12));
+                nodes.push(new Relay(2,"relay22",117,12));
+                nodes.push(new Relay(3,"relay23",124,12));
+                nodes.push(new Relay(1,"relay24",110,28));
+                nodes.push(new Relay(2,"relay25",117,28));
+                nodes.push(new Relay(3,"relay26",124,28));
+                nodes.push(new Consumer(3,"consumer26",132,28));
                 // More complicated network
                 var prod2 = new Producer(5,"prod2",10,40);
                 prod2.energyProductionPerSecond = 20; // it also has 10 consumption, so effectively generating 10 energy

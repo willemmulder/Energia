@@ -301,6 +301,7 @@
                 // Calculate energy to distribute to the network
                 var energyToDistribute = node.calulateEnergyPosition() - network.averageEnergyPosition;
                 node.incomingEnergy = energyToDistribute;
+                node.energyToDistribute = 0;
             });
 
             // B
@@ -360,7 +361,6 @@
                         console.log('removing because of 0 unconfirmedConnections', node);
                         removeNodeFromListToProcess(node);
                     } else if (unconfirmedConnections.length == 1) {
-                        console.log('confirming distribution for ', node);
                         // Remove node from list that we care about
                         removeNodeFromListToProcess(node);
                         // Confirm the energy distribution of the relevant connection
