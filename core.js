@@ -293,7 +293,7 @@
 
         // Pressure from every node is distributed over the network
 
-        networks.forEach(function(network, index) {
+        networks.forEach(function(network, networkIndex) {
             
             // A 
             // First, we calculte how much energy every node has to distribute this turn, initially
@@ -306,11 +306,19 @@
             // B
             // Create a list with nodes that we care about
             // Once a node has a confirmed energydistribution, we will not take it into account anymore
-            var nodesWithUnconfirmedEnergyDistribution = network.nodes.slice();
-            function confirmNode(someNode) {
-                var index = nodesWithUnconfirmedEnergyDistribution.indexOf(someNode);
+            // Also, when a node distributed less than 1 energy to other nodes, we will not care about it until it has incomingEnergy again
+            // TODO: make this more efficient by using an object, by ID instead of a list
+            var nodesToProcess = network.nodes.slice();
+            function removeNodeFromListToProcess(someNode) {
+                var index = nodesToProcess.indexOf(someNode);
                 if (index > -1) {
-                    nodesWithUnconfirmedEnergyDistribution = nodesWithUnconfirmedEnergyDistribution.splice(index, 1);
+                    nodesToProcess.splice(index, 1);
+                }
+            }
+            function addToListToProcess(someNode) {
+                var index = nodesToProcess.indexOf(someNode);
+                if (index == -1) {
+                    nodesToProcess.push(someNode);
                 }
             }
 
@@ -333,52 +341,84 @@
             // We do this by looping:
             //    a) for all nodes that have only one unconfirmed energy-connection, confirm that connection and check the connected node as well
             //    b) for all connections that distribute > 1 energy, redistribute that energy to further nodes. Once distributed energy drops < 1, remove from the list. Once it gets > 1, add it do the list again.
-            while(nodesWithUnconfirmedEnergyDistribution.length > 0) {
+            var counter = 0;
+            while(nodesToProcess.length > 0) {
                 // First for all nodes set incoming energy to outgoing energy
-                nodesWithUnconfirmedEnergyDistribution.forEach(function(node) {
-                    node.energyToDistribute = node.incomingEnergy;
+                nodesToProcess.forEach(function(node) {
+                    console.log('Setting energy to distribute ', node.incomingEnergy);
+                    node.energyToDistribute += node.incomingEnergy;
                     node.incomingEnergy = 0;
                 });
                 // Then process all the outgoing energy per node and add them to the ingoing energy of the connected nodes
-                nodesWithUnconfirmedEnergyDistribution.forEach(function(node) {
+                nodesToProcess.forEach(function(node) {
                     var unconfirmedConnections = node.getNodeConnectionsWithUnconfirmedEnergyDistributions();
                     // If there is only one unconfirmed nodeConnection, then we know for sure all our energy has to go there
                     // So we can calculate that and then confirm that one nodeConnection
-                    if (unconfirmedConnections.length == 1) {
-                        // Confirm node
-                        confirmNode(node);
+                    if (unconfirmedConnections.length == 0) {
+                        // Remove from list that we care about, until the node has received enough incoming energy again
+                        // TODO: process any incomingEnergy or outgoingEnergy. It should add up to 0, right?
+                        console.log('removing because of 0 unconfirmedConnections', node);
+                        removeNodeFromListToProcess(node);
+                    } else if (unconfirmedConnections.length == 1) {
+                        console.log('confirming distribution for ', node);
+                        // Remove node from list that we care about
+                        removeNodeFromListToProcess(node);
                         // Confirm the energy distribution of the relevant connection
                         var unconfirmedConnection = unconfirmedConnections[0];
+                        console.log('confirming connection ', unconfirmedConnection);
                         unconfirmedConnection.energyDistributions.confirmed = true;
+                        unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.confirmed = true;
                         // We need to push all energy we still have to distribute to the one connected node
                         // That is all energy that was already planned to be distributed, plus anything that we might have *received* from our nodeConnection this round
                         node.energyToDistribute += node.incomingEnergy;
+                        node.incomingEnergy = 0;
                         // Now push
                         unconfirmedConnection.energyDistributions.total += node.energyToDistribute;
                         unconfirmedConnection.targetNode.incomingEnergy += node.energyToDistribute;
+                        // Add to nodelist if targetNode has received enough incoming energy
+                        if (unconfirmedConnection.targetNode.incomingEnergy > 1) {
+                            console.log('adding because >1 energy is distributed to it ', unconfirmedConnection.targetNode);
+                            addToListToProcess(unconfirmedConnection.targetNode);
+                        }
                         unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.total -= node.energyToDistribute;
                     } else {
-                        // Calculate energy to distribute, per node
-                        var energyToDistributeToEveryNode = node.energyToDistribute / unconfirmedConnections.length;
-                        // Distribute
-                        if (energyToDistributeToEveryNode > 1) {
+                        // Check how much energy there is to distribute
+                        if (node.energyToDistribute > 1) {
+                            // Calculate energy to distribute, per node
+                            var energyToDistributeToEveryNode = node.energyToDistribute / unconfirmedConnections.length;
+                            // Distribute
                             unconfirmedConnections.forEach(function(unconfirmedConnection) {
                                 unconfirmedConnection.energyDistributions.total += energyToDistributeToEveryNode;
                                 unconfirmedConnection.targetNode.incomingEnergy += energyToDistributeToEveryNode;
+                                // Add to nodelist if targetNode has received enough incoming energy
+                                if (unconfirmedConnection.targetNode.incomingEnergy > 1) {
+                                    console.log('adding because >1 energy is distributed to it ', unconfirmedConnection.targetNode);
+                                    addToListToProcess(unconfirmedConnection.targetNode);
+                                }
                                 unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.total -= energyToDistributeToEveryNode;
                             });
                         } else {
-                            // TODO: if all nodes distribute < 1, then break
+                            if (node.incomingEnergy == 0) {
+                                // Remove from list that we care about, until the node has received enough incoming energy again
+                                console.log('removing because not enough energy to distribute', node);
+                                removeNodeFromListToProcess(node);
+                            }
                         }
                     }
                 }); // end of nodes
+                console.log('round for network ', networkIndex, nodesToProcess.length);
+                console.log(networkIndex, nodesToProcess[0]);
+                counter++;
+                if (counter == 10) {
+                    break;
+                }
             } // end of while
 
         }); // end of networks
         
         // Step 5: execute the energyDistribution and add/subtract from the energy levels of the nodes
         var totalDistribution = 0;
-        networks.forEach(function(network, index) {
+        networks.forEach(function(network, networkIndex) {
             network.energyNotDistributed = 0;
             // First, calculate a general distribution of the available energy to connected nodes
             network.nodes.forEach(function(sourceNode) {
