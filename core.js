@@ -279,12 +279,12 @@
         networks.forEach(function(network, index) {
             var cumulativeEnergyPosition = 0;
             network.nodes.forEach(function(node, index) {
-                //console.log("Energy position of node " + index + " is " + node.calulateEnergyPosition());
+                //log("Energy position of node " + index + " is " + node.calulateEnergyPosition());
                 cumulativeEnergyPosition += node.calulateEnergyPosition();
             });
             network.averageEnergyPosition = cumulativeEnergyPosition / network.nodes.length;
         });
-        console.log(networks);
+        log(networks);
 
         // Step 4: act as if the energy network is like connected tubes with sticky goo.
         // Every node has an upright tube with the surplus goo (everything above average) pushing down into the network or a hole for goo to stream into
@@ -312,7 +312,7 @@
             var nodesToProcess = network.nodes.slice();
             function removeNodeFromListToProcess(someNode) {
                 var index = nodesToProcess.indexOf(someNode);
-                console.log('index to remove is ' + index, someNode, nodesToProcess);
+                log('index to remove is ' + index, someNode, nodesToProcess);
                 if (index > -1) {
                     nodesToProcess.splice(index, 1);
                 }
@@ -347,7 +347,7 @@
             while(nodesToProcess.length > 0) {
                 // First for all nodes set incoming energy to outgoing energy
                 nodesToProcess.forEach(function(node) {
-                    console.log('Setting energy to distribute ', node.energyToDistribute, node.incomingEnergy);
+                    log('Setting energy to distribute ', node.energyToDistribute, node.incomingEnergy);
                     // We add the incoming energy to any possibly not yet distributed energy
                     // This latter can happen because we do not distribute negative energy; so nodes with a negative energyToDistribute will remain like that after a round
                     node.energyToDistribute += node.incomingEnergy;
@@ -359,20 +359,20 @@
                 for(var nodeIndex = nodesToProcess.length-1; nodeIndex >= 0; nodeIndex--) {
                     var node = nodesToProcess[nodeIndex];
                     var unconfirmedConnections = node.getNodeConnectionsWithUnconfirmedEnergyDistributions();
-                    console.log('processing node', node, unconfirmedConnections);
+                    log('processing node', node, unconfirmedConnections);
                     // If there is only one unconfirmed nodeConnection, then we know for sure all our energy has to go there
                     // So we can calculate that and then confirm that one nodeConnection
                     if (unconfirmedConnections.length == 0) {
                         // Remove from list that we care about, until the node has received enough incoming energy again
                         // TODO: process any incomingEnergy or outgoingEnergy. It should add up to 0, right?
-                        console.log('removing because of 0 unconfirmedConnections', node);
+                        log('removing because of 0 unconfirmedConnections', node);
                         removeNodeFromListToProcess(node);
                     } else if (unconfirmedConnections.length == 1) {
                         // Remove node from list that we care about
                         removeNodeFromListToProcess(node);
                         // Confirm the energy distribution of the relevant connection
                         var unconfirmedConnection = unconfirmedConnections[0];
-                        console.log('confirming connection ', unconfirmedConnection);
+                        log('confirming connection ', unconfirmedConnection);
                         unconfirmedConnection.energyDistributions.confirmed = true;
                         unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.confirmed = true;
                         // We need to push all energy we still have to distribute to the one connected node
@@ -384,10 +384,12 @@
                         unconfirmedConnection.targetNode.incomingEnergy += node.energyToDistribute;
                         // Add to nodelist if targetNode has received enough incoming energy
                         if (unconfirmedConnection.targetNode.incomingEnergy > 1) {
-                            console.log('adding because >1 energy is distributed to it ', unconfirmedConnection.targetNode);
+                            log('adding because >1 energy is distributed to it ', unconfirmedConnection.targetNode);
                             addToListToProcess(unconfirmedConnection.targetNode);
                         }
                         unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.total -= node.energyToDistribute;
+                        // Consume the energy from the sourceNode
+                        node.energyToDistribute = 0;
                     } else {
                         // Distribute to all connected (unconfirmed) nodes
                         // We only redistribute energy there is >1 energy to distribute
@@ -401,27 +403,29 @@
                                 unconfirmedConnection.targetNode.incomingEnergy += energyToDistributeToEveryNode;
                                 // Add to nodelist if targetNode has received enough incoming energy
                                 if (unconfirmedConnection.targetNode.incomingEnergy > 1) {
-                                    console.log('adding because >1 energy is distributed to it ', unconfirmedConnection.targetNode);
+                                    log('adding because >1 energy is distributed to it ', unconfirmedConnection.targetNode);
                                     addToListToProcess(unconfirmedConnection.targetNode);
                                 }
                                 unconfirmedConnection.targetNode.nodeConnectionsById[unconfirmedConnection.sourceNode.id].energyDistributions.total -= energyToDistributeToEveryNode;
                             });
+                            // Consume the energy from the sourceNode
+                            node.energyToDistribute = 0;
                         } else {
                             // There is less < 1 energy to distribute. 
                             // That is not significatn enough to process this node any further
                             // If this node also has no incoming energy to process, we remove it from list that we care about
                             // It can be placed back on the list once the node receives incoming energy again
                             if (node.incomingEnergy == 0) {
-                                console.log('removing because it does not require any further processing for now', node);
+                                log('removing because it does not require any further processing for now', node);
                                 removeNodeFromListToProcess(node);
                             }
                         }
                     }
                 } // end of nodes
-                console.log('round for network ', networkIndex, nodesToProcess.length);
-                console.log(networkIndex, nodesToProcess[0]);
+                log('round for network ', networkIndex, nodesToProcess.length);
+                log(networkIndex, nodesToProcess[0]);
                 counter++;
-                if (counter == 2) {
+                if (counter == 50) {
                     break;
                 }
             } // end of while
@@ -443,7 +447,7 @@
                 network.energyNotDistributed += Math.abs(network.averageEnergyPosition - sourceNode.calulateEnergyPosition());
             });
         });
-        console.log(networks);
+        log(networks);
 
     }
 
@@ -456,6 +460,17 @@
             (node1.location.x - node2.location.x) * (node1.location.x - node2.location.x) +
             (node1.location.y - node2.location.y) * (node1.location.y - node2.location.y)
         );
+    }
+
+    // =====
+    // Logger
+    // =====
+
+    var doDebug = false;
+    function log() {
+        if (doDebug) {
+            console.log.apply(this,arguments);
+        }
     }
 
 }).call(this);
