@@ -22,14 +22,25 @@
     }
 
     // =====
+    // Export id-counters
+    // =====
+
+    core.lastUsedNodeId = null;
+
+    // =====
     // Export classes
     // =====
 
     core.classes = {};
 
     class Node {
-        constructor(id, name, x, y, initialEnergy, energyConsumptionPerSecond, signalPower, signalRadius) {
-            this.id = id;
+        constructor(name, x, y, initialEnergy, energyConsumptionPerSecond, signalPower, signalRadius) {
+            // Set ID
+            var currentLastUsedId = core.lastUsedNodeId || 0;
+            var newId = ++currentLastUsedId;
+            this.id = newId;
+            core.lastUsedNodeId = newId;
+            // Set other properties
             this.name = name;
             this.location = {};
             this.location.x = x;
@@ -95,9 +106,8 @@
     }
 
     class Producer extends Node {
-        constructor(id, name,x,y) {
+        constructor(name,x,y) {
             super(
-                id,
                 name,
                 x,
                 y,
@@ -119,9 +129,8 @@
     core.classes.producer = Producer;
 
     class Consumer extends Node {
-        constructor(id,name,x,y) {
+        constructor(name,x,y) {
             super(
-                id,
                 name,
                 x,
                 y,
@@ -139,9 +148,8 @@
     core.classes.consumer = Consumer;
 
     class Relay extends Node {
-        constructor(id,name,x,y) {
+        constructor(name,x,y) {
             super(
-                id,
                 name,
                 x,
                 y,

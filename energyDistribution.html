@@ -27,33 +27,33 @@
                 // 1. Prepare nodes
                 // TODO: create nodes by ID instead of using an Array
                 // Network 1
-                nodes.push(new Producer(0,"prod1",10,10));
-                nodes.push(new Consumer(1,"cons1",17,10));
-                nodes.push(new Consumer(2,"cons2",24,10));
-                nodes.push(new Consumer(3,"cons3",31,10));
+                nodes.push(new Producer("prod1",10,10));
+                nodes.push(new Consumer("cons1",17,10));
+                nodes.push(new Consumer("cons2",24,10));
+                nodes.push(new Consumer("cons3",31,10));
                 // Disconnected node
-                nodes.push(new Consumer(4,"disconnected",51,10));
+                nodes.push(new Consumer("disconnected",51,10));
                 // Network with split from producer into two lines
-                nodes.push(new Producer(5,"prod2",110,20));
-                nodes.push(new Relay(6,"relay21",110,12));
-                nodes.push(new Relay(7,"relay22",117,12));
-                nodes.push(new Relay(8,"relay23",124,12));
-                nodes.push(new Relay(9,"relay24",110,28));
-                nodes.push(new Relay(10,"relay25",117,28));
-                nodes.push(new Relay(11,"relay26",124,28));
-                nodes.push(new Consumer(12,"consumer26",132,28));
+                nodes.push(new Producer("prod2",110,20));
+                nodes.push(new Relay("relay21",110,12));
+                nodes.push(new Relay("relay22",117,12));
+                nodes.push(new Relay("relay23",124,12));
+                nodes.push(new Relay("relay24",110,28));
+                nodes.push(new Relay("relay25",117,28));
+                nodes.push(new Relay("relay26",124,28));
+                nodes.push(new Consumer("consumer26",132,28));
                 // More complicated network
-                var prod2 = new Producer(13,"prod2",10,40);
+                var prod2 = new Producer("prod2",10,40);
                 prod2.energyProductionPerSecond = 20; // it also has 10 consumption, so effectively generating 10 energy
                 nodes.push(prod2);
-                nodes.push(new Relay(14,"relay1",17,36));
-                nodes.push(new Relay(15,"relay2",24,36));
-                nodes.push(new Relay(16,"relay3",31,36));
-                nodes.push(new Relay(17,"relay4",17,44));
-                nodes.push(new Relay(18,"relay5",24,44));
-                nodes.push(new Relay(19,"relay6",31,44));
-                nodes.push(new Relay(20,"relay7",38,40));
-                nodes.push(new Consumer(21,"cons4",44,40));
+                nodes.push(new Relay("relay1",17,36));
+                nodes.push(new Relay("relay2",24,36));
+                nodes.push(new Relay("relay3",31,36));
+                nodes.push(new Relay("relay4",17,44));
+                nodes.push(new Relay("relay5",24,44));
+                nodes.push(new Relay("relay6",31,44));
+                nodes.push(new Relay("relay7",38,40));
+                nodes.push(new Consumer("cons4",44,40));
 
                 // 2. Render the nodes
                 renderNodes(nodes);
