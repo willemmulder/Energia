@@ -611,12 +611,12 @@
         // Sidebar rendering
         // =====
 
-        function drawSidebar(scene2D) {
+        function drawSidebar(graphics2D) {
             if (!game.sidebarElements.parent) {
                 game.sidebarElements.parent = new PIXI.Container();
                 game.sidebarElements.parent.x = 10;
                 game.sidebarElements.parent.y = 10;
-                scene2D.addChild(game.sidebarElements.parent);
+                graphics2D.addChild(game.sidebarElements.parent);
             }
             if (!game.sidebarElements.fps) {
                 game.sidebarElements.fps = new PIXI.Text(babylon.fps, { font: '24px Verdana', fill: '#fff' });
