@@ -67,72 +67,10 @@
 
 
         // =====
-        // 
-        // UTIL FUNCTIONS
-        // 
-        // =====
-
-        function createselectionRingMaterial(scene) {
-            var selectTexture = new BABYLON.DynamicTexture("selectTexture", 512, scene, true);
-            // draw circle using 2d context
-            var context = selectTexture._context;
-            var invertY = true;
-            var size = selectTexture.getSize();
-            var posX = 256;
-            var posY = 256;
-            var radius = 220;
-            context.arc(posX, posY, radius, 0, 2 * Math.PI, false);
-            context.fillStyle = 'rgba(255, 255, 255, 0)';
-            context.fill();
-            context.lineWidth = 30;
-            context.strokeStyle = 'rgb(0, 255, 0)';
-            context.stroke();
-            selectTexture.update(invertY);
-            // create and return actual material
-            var selectMaterial = new BABYLON.StandardMaterial('selectedBoxMaterial', scene);
-            selectMaterial.diffuseTexture = selectTexture;
-            selectMaterial.opacityTexture = selectTexture;
-            return selectMaterial;
-        }
-
-        // =====
         // Selection
         // =====
 
-        function deselectAllUnits(units) {
-        	game.state.selectedEntities = [];
-        	deselectAllMeshes(getUnitMeshes(units));
-        }
-
-        function deselectAllMeshes(meshes) {
-            for (var index in meshes) {
-                meshes[index].material = meshes[index].originalMaterial;
-                if (meshes[index].selectionRing) {
-                    meshes[index].selectionRing.dispose();
-                }
-            }
-        }
-
-        function getUnitsSelectedByRubberBand(scene, units, rubberband) {
-            var selectedEntities = [];
-            scene.render();
-            for (var index in units) {
-            	var unit = units[index];
-                var mesh = unit.mesh;
-                if (rubberband.intersectsPoint(mesh.position)) {
-                    selectedEntities.push(unit);
-                }
-            }
-            return selectedEntities;
-        }
-
-        function get3DGroundPositionForScreenPosition(position) {
-            var pickInfo = scene.pick(position.x, position.y, function (mesh) { return mesh == game.ground; });
-            if (pickInfo.hit) {
-                return pickInfo.pickedPoint;
-            }
-            return null;
-        }
+        /* 
 
         function getBottomPositionOfMesh(mesh) {
             var pos = mesh.position.clone();
@@ -163,20 +101,6 @@
         // Creating new entities
         // =====
 
-        function createEntity(mesh, position) {
-            var entity = {
-                position : position,
-                targetPositions : [], // i.e. waypoints
-                maxVelocity : 100, // in 'blocks' per second
-                mesh : mesh
-            }
-            entity.mesh.entity = entity; // circular ref
-            entity.mesh.visibility = true;
-            entity.mesh.selectable = true;
-            game.shadowGenerator.getShadowMap().renderList.push(entity.mesh);
-            game.entities.push(entity);
-        }
-
         function prepareNewEntityPlacement(entityType) {
             rendererGeneralState.newEntityPlacement = {
                 placementInProgress : true,
@@ -185,87 +109,7 @@
                 desiredPosition : null
             }
         }
-
-        // =====
-        // 3D rendering
-        // =====
-        function render3DScene(scene, materials) {
-        	var currentRenderTime = window.performance.now();
-        	var timeDiff = currentRenderTime - game.last3DRenderTime;
-        	// Set positions
-            // TODO: move into general stuff, this is not related to rendering!
-        	for(var index in game.entities) {
-        		var unit = game.entities[index];
-        		// See if unit needs to move
-        		if (unit.targetPositions.length) {
-        			var targetPosition = unit.targetPositions[0];
-        			var targetMovementVector = targetPosition.subtract(unit.position);
-					var velocity = unit.maxVelocity;
-        			var movement = velocity * (timeDiff / 1000);
-        			var movementVector = targetMovementVector.clone().normalize().scale(movement);
-        			unit.position.addInPlace(movementVector);
-        			if (movementVector.length() > targetMovementVector.length()) {
-        				// we are overshooting our target destination
-        				unit.position = targetPosition;
-        				unit.targetPositions = [];
-        			}
-        		}
-        		unit.mesh.position = unit.position;
-        	}
-        	// Check visibility
-        	if (game.state.selectedEntities.length) {
-        		var selectedEntity = game.state.selectedEntities[0];
-        		// check if selected unit can see other units
-        		for(var index in game.entities) {
-	        		var targetEntity = game.entities[index];
-	        		if (targetEntity == selectedEntity) {
-	        			continue;
-	        		}
-	        		var directionVector = targetEntity.position.subtract(selectedEntity.position).normalize();
-	        		var ray = new BABYLON.Ray(selectedEntity.position, directionVector);
-	        		var pickInfo = scene.pickWithRay(ray, function (mesh) { return mesh.entity != null && mesh.entity != selectedEntity; });
-	        		if (pickInfo.hit && pickInfo.pickedMesh == targetEntity.mesh) {
-	        			// Can see
-	        			targetEntity.mesh.material = game.materials.yellowMaterial;
-	        		} else {
-	        			// Can not see
-	        			targetEntity.mesh.material = game.materials.groundMaterial;
-	        		}
-	    		}
-        	}
-            // Show placeholder for entity placement, if necessary
-            if (rendererGeneralState.newEntityPlacement.placementInProgress) {
-                hideEntities(game.entityPlacementMeshTemplates);
-                var position3D = get3DGroundPositionForScreenPosition(game.mouseCurrentPosition);
-                if (position3D) {
-                    rendererGeneralState.newEntityPlacement.entity.position.x = position3D.x;
-                    rendererGeneralState.newEntityPlacement.entity.position.z = position3D.z;
-                    var entityBottomYPosition = getBottomPositionOfMesh(rendererGeneralState.newEntityPlacement.entity).y;
-                    console.log(entityBottomYPosition);
-                    if (entityBottomYPosition < 0) {
-                       var amountToRaise = -1 * entityBottomYPosition;
-                       rendererGeneralState.newEntityPlacement.entity.position.y += amountToRaise;
-                    }
-                }
-                rendererGeneralState.newEntityPlacement.entity.visibility = true;
-            }
-        	// Store time
-        	game.last3DRenderTime = currentRenderTime;
-        	// Render
-            scene.render();
-        }
-
-        // =====
-        // General
-        // =====
-
-        function getUnitMeshes(units) {
-        	var meshes = [];
-        	for(var index in units) {
-        		meshes.push(units[index].mesh);
-        	}
-        	return meshes;
-        }
+        */
 
     </script>
 </body>
