@@ -1,3 +1,5 @@
+"use strict";
+
 // TODO: this file should require Babylon and Pixi.
 // The main file should really not be bothered what rendering engine we are using
 
@@ -44,6 +46,13 @@ var game = (function(){
             lastUsedEntityId++;
             return lastUsedEntityId;
         },
+        createEntity : function(x, y, z, entityType, player) {
+            var entityId = this.createEntityId();
+            var entity = new Entity(entityId, x, y, z, entityType, 'OK', 1); // TODO: figure out statuses and players
+            game.state.entities[entityId] = entity;
+            renderer2D.onEntityAdded(entity);
+            renderer3D.onEntityAdded(entity);
+        },
         init : function(options) {
             if (this.initialized) {
                 console.log("Game already initialized");
@@ -57,18 +66,15 @@ var game = (function(){
                 console.log("Scene2D or Scene3D was not provided");
                 return;
             }
-            initGameState();
             init2Drenderer(options.pixi, options.scene2D, options.canvas2D)
             init3Drenderer(options.babylon, options.scene3D, options.canvas3D);
+            initGameState();
             initEventListeners(options.canvas2D, options.canvas3D);
             disableDefaultRightClickMenu();
             handleWindowResizes();
             startGameLoop(); // Positions, actions. TODO: sync with 3D rendering? using getAnimationFrame() ?
             startRenderLoop(); // Go!
             this.initialized = true;
-        },
-        tick : function() {
-            maintTick();
         },
         start : function() {
             if (this.started) {
@@ -92,12 +98,59 @@ var game = (function(){
     
 })();
 
-var Entity = function(x,y,type,status,player) {
-    this.x = x;
-    this.y = y;
-    this.type = type;
-    this.status = status;
-    this.player = player;
+class Entity {
+    constructor(id,x,y,z,type,status,player) {
+        this.id = id;
+        this.position = new Position(x,y,z);
+        this.type = type;
+        this.status = status;
+        this.player = player;
+        this.targetPositions = []; // i.e. waypoints
+        this.maxVelocity = 100; // in 'blocks' per second
+        this.renderer2Dstate = {}; // This can be filled by the renderer2D for anything it likes
+        this.renderer3Dstate = {}; // This can be filled by the renderer3D for anything it likes
+    }
+}
+
+class Position {
+    constructor(x,y,z) {
+        this.x = x;
+        this.y = y;
+        this.z = z;
+    }
+    // Use Babylon 3DVector implementation. TODO: copy implementation code in here
+    add(otherVector) {
+        var result = new BABYLON.Vector3(this.x, this.y, this.z).add(new BABYLON.Vector3(otherVector.x, otherVector.y, otherVector.z));
+        return new Position(result.x, result.y, result.z);
+    }
+    addInPlace(otherVector) {
+        var result = new BABYLON.Vector3(this.x, this.y, this.z).add(new BABYLON.Vector3(otherVector.x, otherVector.y, otherVector.z));
+        this.x = result.x;
+        this.y = result.y;
+        this.z = result.z;
+    }
+    subtract(otherVector) {
+        var result = new BABYLON.Vector3(this.x, this.y, this.z).subtract(new BABYLON.Vector3(otherVector.x, otherVector.y, otherVector.z));
+        return new Position(result.x, result.y, result.z);
+    }
+    multiply(otherVector) {
+        var result = new BABYLON.Vector3(this.x, this.y, this.z).multiply(new BABYLON.Vector3(otherVector.x, otherVector.y, otherVector.z));
+        return new Position(result.x, result.y, result.z);
+    }
+    normalize() {
+        var result = new BABYLON.Vector3(this.x, this.y, this.z).normalize();
+        return new Position(result.x, result.y, result.z);
+    }
+    scale(amount) {
+        var result = new BABYLON.Vector3(this.x, this.y, this.z).scale(amount);
+        return new Position(result.x, result.y, result.z);
+    }
+    length() {
+        return new BABYLON.Vector3(this.x, this.y, this.z).length();
+    }
+    clone() {
+        return new Position(this.x, this.y, this.z);
+    }
 }
 
 var actions = {
@@ -130,8 +183,26 @@ var rendererGeneralState = {
     newEntityPlacement : {
         placementInProgress : false,
         entityType : null,
-        entity : null,
         desiredPosition : null
+    },
+    eventState : {
+        isDown : false,
+        isMovedWhileDown : false,
+        lastDownPoint : {
+            x : null,
+            y : null,
+            isLeftClick : false,
+            isMiddleClick : false,
+            isRightClick : false
+        },
+        currentPoint : {
+            x : null,
+            y : null,
+        },
+        lastUpPoint : {
+            x : null,
+            y : null
+        }
     }
 }
 
@@ -172,8 +243,11 @@ var mainGameLoop = (function() {
                     entity.position = targetPosition;
                     entity.targetPositions = [];
                 }
+                // Let renderers update their state according to this position update
+                renderer2D.onEntityUpdated(entity);
+                renderer3D.onEntityUpdated(entity);
             }
-            entity.mesh.position = entity.position;
+            
         }
         // Store time
         lastTickTime = currentTickTime;
@@ -196,26 +270,6 @@ var renderer2D = (function() {
 
     var graphics2D;
     var sidebarElements = {};
-
-    var eventState = {
-        isDown : false,
-        isMovedWhileDown : false,
-        lastDownPoint : {
-            x : null,
-            y : null,
-            isLeftClick : false,
-            isMiddleClick : false,
-            isRightClick : false
-        },
-        currentPoint : {
-            x : null,
-            y : null,
-        },
-        lastUpPoint : {
-            x : null,
-            y : null
-        }
-    }
 
     function init(pixiParam, scene2D) {
         pixi = pixiParam;
@@ -318,24 +372,22 @@ var renderer2D = (function() {
         }
 
         function handlePointerDown(x,y,isLeftClick,isMiddleClick,isRightClick) {
-            eventState.isDown = true;
-            eventState.lastDownPoint = { x: x, y: y, isLeftClick: isLeftClick, isMiddleClick: isMiddleClick, isRightClick: isRightClick };
+            rendererGeneralState.eventState.isDown = true;
+            rendererGeneralState.eventState.lastDownPoint = { x: x, y: y, isLeftClick: isLeftClick, isMiddleClick: isMiddleClick, isRightClick: isRightClick };
         }
 
         function handlePointerMove(x,y) {
-            eventState.currentPoint.x = x;
-            eventState.currentPoint.y = y;
-            if (eventState.isDown) {
-                eventState.isMovedWhileDown = true;
+            rendererGeneralState.eventState.currentPoint.x = x;
+            rendererGeneralState.eventState.currentPoint.y = y;
+            if (rendererGeneralState.eventState.isDown) {
+                rendererGeneralState.eventState.isMovedWhileDown = true;
             }
         }
 
         function handlePointerUp(x,y,isLeftClick,isMiddleClick,isRightClick) {
-            eventState.isDown = false;
-            eventState.isMovedWhileDown = false;
-            eventState.lastUpPoint = { x: x, y: y, isLeftClick: isLeftClick, isMiddleClick: isMiddleClick, isRightClick: isRightClick };
+            rendererGeneralState.eventState.lastUpPoint = { x: x, y: y, isLeftClick: isLeftClick, isMiddleClick: isMiddleClick, isRightClick: isRightClick };
             // Check if user clicked a button in the sidebar
-            var clickedSprite = getSpriteFromPosition(sidebarElements.buttons, eventState.lastUpPoint);
+            var clickedSprite = getSpriteFromPosition(sidebarElements.buttons, rendererGeneralState.eventState.lastUpPoint);
             if (clickedSprite) {
                 if (clickedSprite.clickEventName == "newUnit") {
                     prepareNewEntityPlacement("unit");
@@ -349,18 +401,16 @@ var renderer2D = (function() {
                 if (isLeftClick) {
                     // If there was entity placement in progress, apparently the user wants the entity to be placed here
                     if (rendererGeneralState.newEntityPlacement.placementInProgress) {
-                        hideEntities(entityPlacementMeshTemplates);
-                        var mesh = rendererGeneralState.newEntityPlacement.entity.clone("entity " + game.previewNextEntityId() );
-                        var targetPosition = rendererGeneralState.newEntityPlacement.entity.position;
-                        createEntity(mesh, targetPosition);
-                        rendererGeneralState.newEntityPlacement.entity.visibility = false;
-                        rendererGeneralState.newEntityPlacement.entity = null;
+                        var targetPosition = renderer3D.getFloorPositionAtPosition2D(rendererGeneralState.eventState.currentPoint.x, rendererGeneralState.eventState.currentPoint.y);
+                        var player = 1;
+                        var meshHeight = renderer3D.getHeightOfPositionedEntity();
+                        game.createEntity(targetPosition.x, meshHeight/2, targetPosition.z, rendererGeneralState.newEntityPlacement.entityType, player);
                         rendererGeneralState.newEntityPlacement.placementInProgress = false;
                     } 
                     // If the user was not placing anything, he is selecting something
-                    else if (isLeftClick) {
+                    else {
                         actions.deselectEntities(game.state.entities);
-                        if (!eventState.isMovedWhileDown) {
+                        if (!rendererGeneralState.eventState.isMovedWhileDown) {
                             // Single selection
                             var selectedEntity = renderer3D.getEntityAtPosition2D(x,y);
                             if (selectedEntity) {
@@ -370,10 +420,10 @@ var renderer2D = (function() {
                         } else {
                             // Multi selection
                             game.state.selectedEntities = renderer3D.getEntitiesBetweenPositions2D(
-                                eventState.lastDownPoint.x, 
-                                eventState.lastDownPoint.y, 
-                                eventState.currentPoint.x, 
-                                eventState.currentPoint.y, 
+                                rendererGeneralState.eventState.lastDownPoint.x, 
+                                rendererGeneralState.eventState.lastDownPoint.y, 
+                                rendererGeneralState.eventState.currentPoint.x, 
+                                rendererGeneralState.eventState.currentPoint.y, 
                                 game.state.entities
                             );
                             renderer3D.selectEntities();
@@ -384,22 +434,26 @@ var renderer2D = (function() {
                 if (isRightClick && game.state.selectedEntities.length) {
                     var targetPos = renderer3D.getFloorPositionAtPosition2D(x,y);
                     if (targetPos) {
-                        console.log(targetPos);
+                        console.log(game.state.selectedEntities);
+                        // TODO: fix issue where somehow two records have the same targetPosition while ordered individually
                         for (var index in game.state.selectedEntities) {
-                            var unit = game.state.selectedEntities[index];
-                            targetPos.y = unit.position.y;
-                            unit.targetPositions = [targetPos]; // TODO: ensure that these positions are not in babylon specific notations
+                            console.log('setting!');
+                            var entity = game.state.selectedEntities[index];
+                            targetPos.y = entity.position.y; // Keep vertical position
+                            entity.targetPositions = [targetPos];
                         }
                     }
                 }
             }
-            eventState.lastDownPoint = {};
-            eventState.currentPoint = {};
+            rendererGeneralState.eventState.lastDownPoint = {};
+            rendererGeneralState.eventState.currentPoint = {};
+            rendererGeneralState.eventState.isDown = false;
+            rendererGeneralState.eventState.isMovedWhileDown = false;
         }
 
-        // =====
-        // HELPER FUNCTIONS
-        // =====
+        // ==
+        // Helper functions for eventHandlers
+        // ==
 
         function isEventLeftClick(evt) {
             return evt.button == 0;
@@ -422,12 +476,20 @@ var renderer2D = (function() {
             }
             return null;
         }
+
+        function prepareNewEntityPlacement(entityType) {
+            rendererGeneralState.newEntityPlacement = {
+                placementInProgress : true,
+                entityType : entityType,
+                desiredPosition : null
+            }
+        }
     }
 
     function render() {
         // Draw selection graphics
         graphics2D.clear(); // TODO: can we use scene.clear(); ?
-        if (eventState.isMovedWhileDown) {
+        if (rendererGeneralState.eventState.isMovedWhileDown) {
             drawSelectionSquare();
         }
         // Draw sidebar graphics
@@ -442,7 +504,7 @@ var renderer2D = (function() {
         function drawSelectionSquare() {
             // Draw directly on the main graphics
             graphics2D.lineStyle(2, 0x00FF00, 1);
-            graphics2D.drawRect(eventState.lastDownPoint.x, eventState.lastDownPoint.y, (eventState.currentPoint.x - eventState.lastDownPoint.x), (eventState.currentPoint.y - eventState.lastDownPoint.y));
+            graphics2D.drawRect(rendererGeneralState.eventState.lastDownPoint.x, rendererGeneralState.eventState.lastDownPoint.y, (rendererGeneralState.eventState.currentPoint.x - rendererGeneralState.eventState.lastDownPoint.x), (rendererGeneralState.eventState.currentPoint.y - rendererGeneralState.eventState.lastDownPoint.y));
         }
 
         function drawSidebar() {
@@ -458,6 +520,10 @@ var renderer2D = (function() {
         }
     }
 
+    // =====
+    // Return
+    // =====
+
     return {
         init : init,
         initEventListeners : initEventListeners,
@@ -467,11 +533,14 @@ var renderer2D = (function() {
                 pixi.resize();
             });
         },
-        entityAdded : function(id, entity) {
-
+        onEntityAdded : function(id, entity) {
+            // ...
         }, 
-        entityRemoved : function(id) {
-            
+        onEntityUpdated : function(updatedEntity) {
+            // ...
+        },
+        onEntityRemoved : function(id) {
+            // ...
         }
     };
 	
@@ -541,14 +610,6 @@ var renderer3D = (function() {
         entityPlacementMeshTemplates.unit = meshTemplates.unit.clone("placementUnitTemplate");
         entityPlacementMeshTemplates.mainBuilding = meshTemplates.mainBuilding.clone("placementMainBuildingTemplate");
 
-        // Create units
-        game.state.entities = [];
-        for (var i = 0; i < 10; i++) {
-            var mesh = meshTemplates.unit.clone("entity " + game.state.entities.length);
-            var position = new BABYLON.Vector3(-i * 50, 5, 0);
-            var entity = createEntity(mesh, position);
-        }
-    
         // Ground
         ground = BABYLON.Mesh.CreateGround("Ground", 1000, 1000, 1, scene, true);
         ground.material = materials.groundMaterial;
@@ -561,38 +622,38 @@ var renderer3D = (function() {
         if (game.state.selectedEntities.length) {
             var selectedEntity = game.state.selectedEntities[0];
             // check if selected unit can see other units
-            for(var index in game.entities) {
-                var targetEntity = game.entities[index];
+            for(var entityId in game.state.entities) {
+                var targetEntity = game.state.entities[entityId];
                 if (targetEntity == selectedEntity) {
                     continue;
                 }
                 var directionVector = targetEntity.position.subtract(selectedEntity.position).normalize();
                 var ray = new BABYLON.Ray(selectedEntity.position, directionVector);
                 var pickInfo = scene.pickWithRay(ray, function (mesh) { return mesh.entity != null && mesh.entity != selectedEntity; });
-                if (pickInfo.hit && pickInfo.pickedMesh == targetEntity.mesh) {
+                if (pickInfo.hit && pickInfo.pickedMesh == targetEntity.renderer3Dstate.mesh) {
                     // Can see
-                    targetEntity.mesh.material = game.materials.yellowMaterial;
+                    targetEntity.renderer3Dstate.mesh.material = materials.yellowMaterial;
                 } else {
                     // Can not see
-                    targetEntity.mesh.material = game.materials.groundMaterial;
+                    targetEntity.renderer3Dstate.mesh.material = materials.groundMaterial;
                 }
             }
         }
         // Show placeholder for entity placement, if necessary
+        hideEntities(entityPlacementMeshTemplates);
         if (rendererGeneralState.newEntityPlacement.placementInProgress) {
-            hideEntities(game.entityPlacementMeshTemplates);
-            var position3D = getFloorPositionAtPosition2D(game.mouseCurrentPosition.x, game.mouseCurrentPosition.y);
+            var relevantEntityPlacementMeshTemplate = entityPlacementMeshTemplates[rendererGeneralState.newEntityPlacement.entityType];
+            var position3D = getFloorPositionAtPosition2D(rendererGeneralState.eventState.currentPoint.x, rendererGeneralState.eventState.currentPoint.y);
             if (position3D) {
-                rendererGeneralState.newEntityPlacement.entity.position.x = position3D.x;
-                rendererGeneralState.newEntityPlacement.entity.position.z = position3D.z;
-                var entityBottomYPosition = getBottomPositionOfMesh(rendererGeneralState.newEntityPlacement.entity).y;
-                console.log(entityBottomYPosition);
+                relevantEntityPlacementMeshTemplate.position.x = position3D.x;
+                relevantEntityPlacementMeshTemplate.position.z = position3D.z;
+                var entityBottomYPosition = getBottomPositionOfMesh(relevantEntityPlacementMeshTemplate).y;
                 if (entityBottomYPosition < 0) {
                    var amountToRaise = -1 * entityBottomYPosition;
-                   rendererGeneralState.newEntityPlacement.entity.position.y += amountToRaise;
+                   relevantEntityPlacementMeshTemplate.position.y += amountToRaise;
                 }
             }
-            rendererGeneralState.newEntityPlacement.entity.visibility = true;
+            relevantEntityPlacementMeshTemplate.visibility = true;
         }
         // Render
         scene.render();
@@ -604,23 +665,38 @@ var renderer3D = (function() {
         });
     }
 
-    function entityAdded(id, entity) {
+    function onEntityAdded(entity) {
+        // Set mesh
+        var relevantEntityMeshTemplate = meshTemplates[entity.type];
+        entity.renderer3Dstate.mesh = relevantEntityMeshTemplate.clone("entity " + entity.id);
+        entity.renderer3Dstate.mesh.entity = entity; // circular ref
+        entity.renderer3Dstate.mesh.visibility = true;
+        entity.renderer3Dstate.mesh.selectable = true;
+        // Add to shadowmap
+        shadowGenerator.getShadowMap().renderList.push(entity.renderer3Dstate.mesh);
+        // Add babylon position
+        entity.renderer3Dstate.mesh.position = new BABYLON.Vector3(entity.position.x, entity.position.y, entity.position.z);
+    }
+
+    function onEntityRemoved(id) {
 
     }
 
-    function entityRemoved(id) {
-
+    function getFloorPositionAtPosition2D(x,y) {
+        var pickInfo = scene.pick(x, y, function (mesh) { return mesh == ground; });
+        if (pickInfo.hit) {
+            return new Position(pickInfo.pickedPoint.x, pickInfo.pickedPoint.y, pickInfo.pickedPoint.z);
+        }
+        return null;
     }
 
     function getEntitiesBetweenPositions2D(startPosX, startPosY, endPosX, endPosY, entitiesToCheck) {
         // Find location in 3D
-        var startPick = scene.pick(startPosx, startPosy, function (mesh) { return mesh == ground; });
-        var endPick = scene.pick(endPosx, endPosy, function (mesh) { return mesh == ground; });
-        if (!startPick.hit || !endPick.hit) {
+        var startPosOnFloor = getFloorPositionAtPosition2D(startPosX, startPosY);
+        var endPosOnFloor = getFloorPositionAtPosition2D(endPosX, endPosY);
+        if (!startPosOnFloor || !endPosOnFloor) {
             return [];
         }
-        var startPosOnFloor = startPick.pickedPoint;
-        var endPosOnFloor = endPick.pickedPoint;
         // Set selection mesh
         var rubberBandSelectionMesh = new BABYLON.MeshBuilder.CreateBox("rubberBand", { height: 100, width: endPosOnFloor.x - startPosOnFloor.x, depth: endPosOnFloor.z - startPosOnFloor.z, updateable: true }, scene);
         rubberBandSelectionMesh.position = new BABYLON.Vector3(startPosOnFloor.x + (endPosOnFloor.x - startPosOnFloor.x) / 2, 50, startPosOnFloor.z + (endPosOnFloor.z - startPosOnFloor.z) / 2);
@@ -633,12 +709,18 @@ var renderer3D = (function() {
         scene.render(); // TODO: remove?
         for (var entityId in entitiesToCheck) {
             var entity = entitiesToCheck[entityId];
-            var mesh = entity.mesh;
+            var mesh = entity.renderer3Dstate.mesh;
             if (rubberBandSelectionMesh.intersectsPoint(mesh.position)) {
-                selectedEntities.push(unit);
+                selectedEntities.push(entity);
             }
         }
         return selectedEntities;
+    }
+
+    function hideEntities(entities) {
+        for (var index in entities) {
+            entities[index].visibility = false;
+        }
     }
 
     // =====
@@ -699,22 +781,6 @@ var renderer3D = (function() {
         return selectMaterial;
     }
 
-    function createEntity(mesh, position) {
-        var entityId = game.createEntityId();
-        var entity = {
-            id : entityId,
-            position : position,
-            targetPositions : [], // i.e. waypoints
-            maxVelocity : 100, // in 'blocks' per second
-            mesh : mesh
-        }
-        entity.mesh.entity = entity; // circular ref
-        entity.mesh.visibility = true;
-        entity.mesh.selectable = true;
-        shadowGenerator.getShadowMap().renderList.push(entity.mesh);
-        game.state.entities[entityId] = entity;
-    }
-
     function deselectMeshes(meshes) {
         for (var index in meshes) {
             meshes[index].material = meshes[index].originalMaterial;
@@ -724,6 +790,17 @@ var renderer3D = (function() {
         }
     }
 
+    function getBottomPositionOfMesh(mesh) {
+        var pos = mesh.position.clone();
+        var minimumPos = mesh.getBoundingInfo().boundingBox.minimumWorld;
+        pos.y = minimumPos.y;
+        return pos;
+    }
+
+    // =====
+    // Return
+    // =====
+
     return {
     	init : init,
         startRenderloop : startRenderloop,
@@ -732,8 +809,13 @@ var renderer3D = (function() {
                 babylon.resize();
             });
         },
-        entityAdded : entityAdded,
-        entityRemoved : entityRemoved,
+        onEntityAdded : onEntityAdded,
+        onEntityUpdated : function(updatedEntity) {
+            updatedEntity.renderer3Dstate.mesh.position.x = updatedEntity.position.x;
+            updatedEntity.renderer3Dstate.mesh.position.y = updatedEntity.position.y;
+            updatedEntity.renderer3Dstate.mesh.position.z = updatedEntity.position.z;
+        },
+        onEntityRemoved : onEntityRemoved,
         getEntityAtPosition2D : function(x,y) {
             var pickInfo = scene.pick(x, y, function (mesh) { return mesh.selectable; });
             if (!pickInfo.hit) {
@@ -742,20 +824,22 @@ var renderer3D = (function() {
             var currentMesh = pickInfo.pickedMesh;
             return currentMesh.entity;
         },
-        getFloorPositionAtPosition2D(x,y) {
-            var pickInfo = scene.pick(x, y, function (mesh) { return mesh == ground; });
-            if (pickInfo.hit) {
-                return pickInfo.pickedPoint;
+        getHeightOfPositionedEntity : function() {
+            if (rendererGeneralState.newEntityPlacement.placementInProgress) {
+                var relevantEntityPlacementMeshTemplate = entityPlacementMeshTemplates[rendererGeneralState.newEntityPlacement.entityType];
+                return relevantEntityPlacementMeshTemplate.getBoundingInfo().boundingBox.maximumWorld.y - relevantEntityPlacementMeshTemplate.getBoundingInfo().boundingBox.minimumWorld.y;
             }
-            return null;
         },
-        getUnitsSelectedByRubberBand : function(units) {
-            return getUnitsSelectedByRubberBand(units);
+        getFloorPositionAtPosition2D : function(x,y) {
+            return getFloorPositionAtPosition2D(x,y);
+        },
+        getEntitiesBetweenPositions2D : function(startPosX, startPosY, endPosX, endPosY, entitiesById) {
+            return getEntitiesBetweenPositions2D(startPosX, startPosY, endPosX, endPosY, entitiesById);
         },
         // TODO: make this an event listener onEntitiesSelected() that is called by a central selectEntities(entities) function
-        selectEntities() {
+        selectEntities : function() {
             for (var index in game.state.selectedEntities) {
-                var mesh = game.state.selectedEntities[index].mesh;
+                var mesh = game.state.selectedEntities[index].renderer3Dstate.mesh;
                 mesh.selectionRing = meshTemplates.selectionRing.clone("selectionRing");
                 mesh.selectionRing.parent = mesh;
                 mesh.selectionRing.visibility = true;
@@ -763,7 +847,7 @@ var renderer3D = (function() {
         },
         deselectEntities: function(entitiesById) {
             for (var entityId in entitiesById) {
-                var mesh = entitiesById[entityId].mesh;
+                var mesh = entitiesById[entityId].renderer3Dstate.mesh;
                 mesh.material = mesh.originalMaterial;
                 if (mesh.selectionRing) {
                     mesh.selectionRing.dispose();
@@ -778,16 +862,22 @@ var renderer3D = (function() {
 // Private functions
 // =====
 
-function initGameState() {
-
-}
-
 function init2Drenderer(pixi, scene2D, canvas2D) {
     renderer2D.init(pixi, scene2D);
 }
 
 function init3Drenderer(babylon, scene3D, canvas3D) {
     renderer3D.init(babylon, scene3D);
+}
+
+function initGameState() {
+    // Create entities
+    game.state.entities = [];
+    for (var i = 0; i < 10; i++) {
+        var entityType = 'unit';
+        var player = 1;
+        game.createEntity(-i * 50, 5, 0, entityType, player);
+    }
 }
 
 function initEventListeners() {
@@ -813,11 +903,5 @@ function startRenderLoop() {
 }
 
 function pauseRenderLoop() {
-
-}
-
-
-
-function mainTick() {
 
 }
