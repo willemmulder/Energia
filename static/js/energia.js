@@ -102,8 +102,12 @@ class Entity {
     constructor(id,x,y,z,type,status,player) {
         this.id = id;
         this.position = new Position(x,y,z);
-        this.energy = 100;
         this.type = type;
+        if (this.type == 'mainBuilding') {
+            this.energyNode = new core.classes.Producer(this.id, this.position.x, this.position.y);
+        } else {
+            this.energyNode = new core.classes.Consumer(this.id, this.position.x, this.position.y);
+        }
         this.status = status;
         this.player = player;
         this.targetPositions = []; // i.e. waypoints
@@ -249,8 +253,14 @@ var mainGameLoop = (function() {
                 renderer2D.onEntityUpdated(entity);
                 renderer3D.onEntityUpdated(entity);
             }
-            
         }
+        // Calculate energy usage
+        var listOfAllEnergyNodes = [];
+        for(var entityId in game.state.entities) {
+            var entity = game.state.entities[entityId];
+            listOfAllEnergyNodes.push(entity.energyNode);
+        }
+        core.tick(listOfAllEnergyNodes, timeDiff);
         // Store time
         lastTickTime = currentTickTime;
     }
@@ -518,7 +528,7 @@ var renderer2D = (function() {
             for(var index in game.state.entities) {
                 var entity = game.state.entities[index];
                 var labelPosition2D = renderer3D.get2DpositionForEntity(entity);
-                entity.renderer2Dstate.label.text = entity.energy;
+                entity.renderer2Dstate.label.text = Math.round(entity.energyNode.energy);
                 entity.renderer2Dstate.label.x = labelPosition2D.x-10;
                 entity.renderer2Dstate.label.y = labelPosition2D.y-50;
             }
@@ -552,7 +562,7 @@ var renderer2D = (function() {
                 font : '12px Arial',
                 //fill : '#F7EDCA'
             };
-            var label = new PIXI.Text(entity.energy, labelStyle);
+            var label = new PIXI.Text(Math.round(entity.energyNode.energy), labelStyle);
             entity.renderer2Dstate.label = label;
             graphics2D.addChild(label);
         }, 

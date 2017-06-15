@@ -11,10 +11,10 @@
         <script src="./static/js/core.js"></script>
         <script>
             
-            var Producer = core.classes.producer;
-            var Consumer = core.classes.consumer;
-            var Relay = core.classes.relay;
-            var NodeConnection = core.classes.nodeConnection;
+            var Producer = core.classes.Producer;
+            var Consumer = core.classes.Consumer;
+            var Relay = core.classes.Relay;
+            var NodeConnection = core.classes.NodeConnection;
             var tick = core.tick;
 
             // =====
@@ -27,33 +27,33 @@
                 // 1. Prepare nodes
                 // TODO: create nodes by ID instead of using an Array
                 // Network 1
-                nodes.push(new Producer("prod1",10,10));
-                nodes.push(new Consumer("cons1",17,10));
-                nodes.push(new Consumer("cons2",24,10));
-                nodes.push(new Consumer("cons3",31,10));
+                nodes.push(new Producer(100,100));
+                nodes.push(new Consumer(170,100));
+                nodes.push(new Consumer(240,100));
+                nodes.push(new Consumer(310,100));
                 // Disconnected node
-                nodes.push(new Consumer("disconnected",51,10));
+                nodes.push(new Consumer(510,100));
                 // Network with split from producer into two lines
-                nodes.push(new Producer("prod2",110,20));
-                nodes.push(new Relay("relay21",110,12));
-                nodes.push(new Relay("relay22",117,12));
-                nodes.push(new Relay("relay23",124,12));
-                nodes.push(new Relay("relay24",110,28));
-                nodes.push(new Relay("relay25",117,28));
-                nodes.push(new Relay("relay26",124,28));
-                nodes.push(new Consumer("consumer26",132,28));
+                nodes.push(new Producer(1100,200));
+                nodes.push(new Relay(1100,120));
+                nodes.push(new Relay(1170,120));
+                nodes.push(new Relay(1240,120));
+                nodes.push(new Relay(1100,280));
+                nodes.push(new Relay(1170,280));
+                nodes.push(new Relay(1240,280));
+                nodes.push(new Consumer(1320,280));
                 // More complicated network
-                var prod2 = new Producer("prod2",10,40);
+                var prod2 = new Producer(100,400);
                 prod2.energyProductionPerSecond = 20; // it also has 10 consumption, so effectively generating 10 energy
                 nodes.push(prod2);
-                nodes.push(new Relay("relay1",17,36));
-                nodes.push(new Relay("relay2",24,36));
-                nodes.push(new Relay("relay3",31,36));
-                nodes.push(new Relay("relay4",17,44));
-                nodes.push(new Relay("relay5",24,44));
-                nodes.push(new Relay("relay6",31,44));
-                nodes.push(new Relay("relay7",38,40));
-                nodes.push(new Consumer("cons4",44,40));
+                nodes.push(new Relay(170,360));
+                nodes.push(new Relay(240,360));
+                nodes.push(new Relay(310,360));
+                nodes.push(new Relay(170,440));
+                nodes.push(new Relay(240,440));
+                nodes.push(new Relay(310,440));
+                nodes.push(new Relay(380,400));
+                nodes.push(new Consumer(440,400));
 
                 // 2. Render the nodes
                 renderNodes(nodes);
@@ -82,7 +82,7 @@
                 function renderNodes(nodeList) {
                     var container1 = document.getElementById('nodesList1');
                     container1.innerHTML = "";
-                    var zoomFactor = 10;
+                    var zoomFactor = 1;
                     nodeList.forEach(function(node, index) {
                         // Render node
                         var diameter = node.signalRadius * 2;

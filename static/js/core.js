@@ -34,14 +34,13 @@
     core.classes = {};
 
     class Node {
-        constructor(name, x, y, initialEnergy, energyConsumptionPerSecond, signalPower, signalRadius) {
+        constructor(x, y, initialEnergy, energyConsumptionPerSecond, signalPower, signalRadius) {
             // Set ID
             var currentLastUsedId = core.lastUsedNodeId || 0;
             var newId = ++currentLastUsedId;
             this.id = newId;
             core.lastUsedNodeId = newId;
             // Set other properties
-            this.name = name;
             this.location = {};
             this.location.x = x;
             this.location.y = y;
@@ -106,15 +105,14 @@
     }
 
     class Producer extends Node {
-        constructor(name,x,y) {
+        constructor(x,y) {
             super(
-                name,
                 x,
                 y,
                 900, 
                 10,
                 10,
-                10
+                100
             );
             this.energyProductionPerSecond = 100;
         }
@@ -126,18 +124,17 @@
             return this.energyProductionPerSecond * (deltaTimeInMilliseconds/1000) ; // TODO: make energy production also dependent on resources that the Producer has
         }
     }
-    core.classes.producer = Producer;
+    core.classes.Producer = Producer;
 
     class Consumer extends Node {
-        constructor(name,x,y) {
+        constructor(x,y) {
             super(
-                name,
                 x,
                 y,
                 500, 
                 10,
                 10,
-                10
+                100
             );
         }
 
@@ -145,18 +142,17 @@
             return 0;
         }
     }
-    core.classes.consumer = Consumer;
+    core.classes.Consumer = Consumer;
 
     class Relay extends Node {
-        constructor(name,x,y) {
+        constructor(x,y) {
             super(
-                name,
                 x,
                 y,
                 500, 
                 0,
                 10,
-                10
+                100
             );
         }
 
@@ -164,7 +160,7 @@
             return 0;
         }
     }
-    core.classes.relay = Relay;
+    core.classes.Relay = Relay;
 
     class NodeConnection {
         constructor(sourceNode, targetNode, distance) {
@@ -180,7 +176,7 @@
             return this.sourceNode.signalPower; // TODO: we could take the distance into account and do signalPower * (this.distance / this.sourceNode.signalRadius);
         }
     }
-    core.classes.nodeConnection = NodeConnection;
+    core.classes.NodeConnection = NodeConnection;
 
     class Network {
         constructor(id) {
@@ -191,7 +187,7 @@
             this.energyNotDistributed = 0;
         }
     }
-    core.classes.network = Network;
+    core.classes.Network = Network;
 
     // =====
     // Export tick function
