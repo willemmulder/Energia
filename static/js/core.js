@@ -41,9 +41,9 @@
             this.id = newId;
             core.lastUsedNodeId = newId;
             // Set other properties
-            this.location = {};
-            this.location.x = x;
-            this.location.y = y;
+            this.position = {};
+            this.position.x = x;
+            this.position.y = y;
             this.energy = initialEnergy;
             this.desiredMinimumEnergy = 100;
             this.energyConsumptionPerSecond = energyConsumptionPerSecond;
@@ -251,7 +251,7 @@
         // Basically you take an unlabeled (AKA uncoloured) node and assign a new label to it. You assign the same label to all nodes adjacent to that one, and so on to all nodes that are reachable from that node.
         // When no more reachable nodes can be labeled, you start over by picking another unlabeled node. Notice that the fact that this new node is unlabeled implies that it is not reachable from our earlier node and is thus in a different disconnected component.
         // When there are no more unlabeled nodes, the number of distinct labels you had to use is the number of components of the graph. The label for each node tells you which node is part of which component.
-        var networks = [];
+        var networks = core.networks = [];
         var networkIdCounter = 0;
         nodesList.forEach(function(node, index) {
             if (!node.networkId) {
@@ -461,8 +461,8 @@
 
     function calculateDistance(node1, node2) {
         return Math.sqrt(
-            (node1.location.x - node2.location.x) * (node1.location.x - node2.location.x) +
-            (node1.location.y - node2.location.y) * (node1.location.y - node2.location.y)
+            (node1.position.x - node2.position.x) * (node1.position.x - node2.position.x) +
+            (node1.position.y - node2.position.y) * (node1.position.y - node2.position.y)
         );
     }
 

@@ -258,6 +258,8 @@ var mainGameLoop = (function() {
         var listOfAllEnergyNodes = [];
         for(var entityId in game.state.entities) {
             var entity = game.state.entities[entityId];
+            entity.energyNode.position.x = entity.position.x;
+            entity.energyNode.position.y = entity.position.z; // NOTE: energyNode position only has x and y, while in 3D space we have x,y,z where y is vertical
             listOfAllEnergyNodes.push(entity.energyNode);
         }
         core.tick(listOfAllEnergyNodes, timeDiff);
@@ -630,7 +632,7 @@ var renderer3D = (function() {
 
         var selectionRingTemplate;
         meshTemplates.selectionRing = selectionRingTemplate = BABYLON.Mesh.CreateDisc('SelectionRing', 15, 32, scene);
-        selectionRingTemplate.material = materials.selectionRingMaterial;;
+        selectionRingTemplate.material = materials.selectionRingMaterial;
         selectionRingTemplate.position.y = 0.1;
         selectionRingTemplate.rotation.x = Math.PI / 2;
         selectionRingTemplate.receiveShadows = true;
@@ -707,6 +709,13 @@ var renderer3D = (function() {
         shadowGenerator.getShadowMap().renderList.push(entity.renderer3Dstate.mesh);
         // Add babylon position
         entity.renderer3Dstate.mesh.position = new BABYLON.Vector3(entity.position.x, entity.position.y, entity.position.z);
+        // Add energy distribution circle
+        var mesh = entity.renderer3Dstate.mesh;
+        mesh.energyCircleMesh = meshTemplates.selectionRing.clone("selectionRing");
+        mesh.energyCircleMesh.scaling.x = entity.energyNode.signalRadius / 15;
+        mesh.energyCircleMesh.scaling.y = entity.energyNode.signalRadius / 15;
+        mesh.energyCircleMesh.parent = mesh;
+        mesh.energyCircleMesh.visibility = true;
     }
 
     function onEntityRemoved(id) {
@@ -918,7 +927,7 @@ function init3Drenderer(babylon, scene3D, canvas3D) {
 function initGameState() {
     // Create entities
     game.state.entities = [];
-    for (var i = 0; i < 10; i++) {
+    for (var i = 0; i < 5; i++) {
         var entityType = 'unit';
         var player = 1;
         game.createEntity(-i * 50, 5, 0, entityType, player);
