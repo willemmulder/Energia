@@ -102,6 +102,7 @@ class Entity {
     constructor(id,x,y,z,type,status,player) {
         this.id = id;
         this.position = new Position(x,y,z);
+        this.energy = 100;
         this.type = type;
         this.status = status;
         this.player = player;
@@ -355,16 +356,16 @@ var renderer2D = (function() {
 
         function handleKeyDown(key) {
             if (key == 'W') {
-                camera.cameraDirection.z += 10;
+                renderer3D.moveViewPortUp(10);
             }
             if (key == 'S') {
-                camera.cameraDirection.z -= 10;
+                renderer3D.moveViewPortUp(-10);
             }
             if (key == 'D') {
-                camera.cameraDirection.x += 10;
+                renderer3D.moveViewPortRight(10);
             }
             if (key == 'A') {
-                camera.cameraDirection.x -= 10;
+                renderer3D.moveViewPortRight(-10);
             }
         }
 
@@ -494,6 +495,8 @@ var renderer2D = (function() {
         }
         // Draw sidebar graphics
         drawSidebar();
+        // Draw entity labels
+        drawEntityLabels();
         // Render
         pixi.render(scene);
 
@@ -509,6 +512,16 @@ var renderer2D = (function() {
 
         function drawSidebar() {
             sidebarElements.fps.text = "3D: " + Math.round(babylon.fps) + " fps";
+        }
+
+        function drawEntityLabels() {
+            for(var index in game.state.entities) {
+                var entity = game.state.entities[index];
+                var labelPosition2D = renderer3D.get2DpositionForEntity(entity);
+                entity.renderer2Dstate.label.text = entity.energy;
+                entity.renderer2Dstate.label.x = labelPosition2D.x-10;
+                entity.renderer2Dstate.label.y = labelPosition2D.y-50;
+            }
         }
     }
 
@@ -533,8 +546,15 @@ var renderer2D = (function() {
                 pixi.resize();
             });
         },
-        onEntityAdded : function(id, entity) {
-            // ...
+        onEntityAdded : function(entity) {
+            graphics2D.lineStyle(2, 0x00FF00, 1);
+            var labelStyle = {
+                font : '12px Arial',
+                //fill : '#F7EDCA'
+            };
+            var label = new PIXI.Text(entity.energy, labelStyle);
+            entity.renderer2Dstate.label = label;
+            graphics2D.addChild(label);
         }, 
         onEntityUpdated : function(updatedEntity) {
             // ...
@@ -554,6 +574,7 @@ var renderer3D = (function() {
     	
     var babylon;
     var scene;
+    var camera;
     var state = {};
 
     var materials = {};
@@ -569,7 +590,7 @@ var renderer3D = (function() {
         var lights = createLights(scene);
         materials = createMaterials(scene);
 
-        window.camera = new BABYLON.FreeCamera("Camera", new BABYLON.Vector3(0, 400, -200), scene);
+        camera = new BABYLON.FreeCamera("Camera", new BABYLON.Vector3(0, 400, -200), scene);
         camera.rotation.y = 0; // look straigt forward
         camera.rotation.x = 0.3 * Math.PI; // look slight down
         
@@ -632,10 +653,10 @@ var renderer3D = (function() {
                 var pickInfo = scene.pickWithRay(ray, function (mesh) { return mesh.entity != null && mesh.entity != selectedEntity; });
                 if (pickInfo.hit && pickInfo.pickedMesh == targetEntity.renderer3Dstate.mesh) {
                     // Can see
-                    targetEntity.renderer3Dstate.mesh.material = materials.yellowMaterial;
+                    // targetEntity.renderer3Dstate.mesh.material = materials.yellowMaterial;
                 } else {
                     // Can not see
-                    targetEntity.renderer3Dstate.mesh.material = materials.groundMaterial;
+                    // targetEntity.renderer3Dstate.mesh.material = materials.groundMaterial;
                 }
             }
         }
@@ -809,6 +830,12 @@ var renderer3D = (function() {
                 babylon.resize();
             });
         },
+        moveViewPortRight : function(amount) {
+            camera.cameraDirection.x += amount;
+        },
+        moveViewPortUp : function(amount) {
+            camera.cameraDirection.z += amount;
+        },
         onEntityAdded : onEntityAdded,
         onEntityUpdated : function(updatedEntity) {
             updatedEntity.renderer3Dstate.mesh.position.x = updatedEntity.position.x;
@@ -835,6 +862,15 @@ var renderer3D = (function() {
         },
         getEntitiesBetweenPositions2D : function(startPosX, startPosY, endPosX, endPosY, entitiesById) {
             return getEntitiesBetweenPositions2D(startPosX, startPosY, endPosX, endPosY, entitiesById);
+        },
+        get2DpositionForEntity : function(entity) {
+            var position = BABYLON.Vector3.Project(
+                entity.renderer3Dstate.mesh.position, 
+                BABYLON.Matrix.Identity(),
+                scene.getTransformMatrix(),
+                camera.viewport.toGlobal(babylon.getRenderWidth(), babylon.getRenderHeight())
+            );
+            return { x: position.x, y: position.y };
         },
         onEntitiesSelected : function(selectedEntities) {
             for (var index in selectedEntities) {
