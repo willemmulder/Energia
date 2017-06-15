@@ -154,8 +154,9 @@ class Position {
 }
 
 var actions = {
-	selectEntities : function(entityIds) {
-        // TODO: use this!
+	selectEntities : function(selectedEntities) {
+        game.state.selectedEntities = selectedEntities;
+        renderer3D.onEntitiesSelected(selectedEntities);
 	},
 	deselectEntities : function(entitiesById) {
         var deselectedEntities = [];
@@ -175,7 +176,7 @@ var actions = {
             }
         }
         game.state.selectedEntities = remainingSelectedEntities;
-        renderer3D.deselectEntities(deselectedEntities);
+        renderer3D.onEntitiesDeselected(deselectedEntities);
 	}
 }
 
@@ -414,19 +415,18 @@ var renderer2D = (function() {
                             // Single selection
                             var selectedEntity = renderer3D.getEntityAtPosition2D(x,y);
                             if (selectedEntity) {
-                                game.state.selectedEntities = [selectedEntity];
-                                renderer3D.selectEntities(); 
+                                actions.selectEntities([selectedEntity]);
                             }
                         } else {
                             // Multi selection
-                            game.state.selectedEntities = renderer3D.getEntitiesBetweenPositions2D(
+                            var entitiesToSelect = renderer3D.getEntitiesBetweenPositions2D(
                                 rendererGeneralState.eventState.lastDownPoint.x, 
                                 rendererGeneralState.eventState.lastDownPoint.y, 
                                 rendererGeneralState.eventState.currentPoint.x, 
                                 rendererGeneralState.eventState.currentPoint.y, 
                                 game.state.entities
                             );
-                            renderer3D.selectEntities();
+                            actions.selectEntities(entitiesToSelect);
                         }
                     }
                 } else
@@ -836,18 +836,17 @@ var renderer3D = (function() {
         getEntitiesBetweenPositions2D : function(startPosX, startPosY, endPosX, endPosY, entitiesById) {
             return getEntitiesBetweenPositions2D(startPosX, startPosY, endPosX, endPosY, entitiesById);
         },
-        // TODO: make this an event listener onEntitiesSelected() that is called by a central selectEntities(entities) function
-        selectEntities : function() {
-            for (var index in game.state.selectedEntities) {
-                var mesh = game.state.selectedEntities[index].renderer3Dstate.mesh;
+        onEntitiesSelected : function(selectedEntities) {
+            for (var index in selectedEntities) {
+                var mesh = selectedEntities[index].renderer3Dstate.mesh;
                 mesh.selectionRing = meshTemplates.selectionRing.clone("selectionRing");
                 mesh.selectionRing.parent = mesh;
                 mesh.selectionRing.visibility = true;
             }
         },
-        deselectEntities: function(entitiesById) {
-            for (var entityId in entitiesById) {
-                var mesh = entitiesById[entityId].renderer3Dstate.mesh;
+        onEntitiesDeselected: function(entitiesToDeselect) {
+            for (var index in entitiesToDeselect) {
+                var mesh = entitiesToDeselect[index].renderer3Dstate.mesh;
                 mesh.material = mesh.originalMaterial;
                 if (mesh.selectionRing) {
                     mesh.selectionRing.dispose();
@@ -905,3 +904,23 @@ function startRenderLoop() {
 function pauseRenderLoop() {
 
 }
+
+// =====
+// Unused code
+// =====
+
+/* 
+
+    function getWidthXOfMesh(mesh) {
+        return mesh.getBoundingInfo().boundingBox.maximumWorld.x - mesh.getBoundingInfo().boundingBox.minimumWorld.x;
+    }
+
+    function getWidthZOfMesh(mesh) {
+        return mesh.getBoundingInfo().boundingBox.maximumWorld.z - mesh.getBoundingInfo().boundingBox.minimumWorld.z;
+    }
+
+    function getHeightOfMesh(mesh) {
+        return mesh.getBoundingInfo().boundingBox.maximumWorld.y - mesh.getBoundingInfo().boundingBox.minimumWorld.y;
+    }
+
+*/
