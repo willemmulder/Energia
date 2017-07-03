@@ -300,7 +300,7 @@
         networks.forEach(function(network, networkIndex) {
             
             // A 
-            // First, we calculte how much energy every node has to distribute this turn, initially
+            // First, we calculate how much energy every node has to distribute this turn, initially
             network.nodes.forEach(function(node) {
                 // Calculate energy to distribute to the network
                 var energyToDistribute = node.calulateEnergyPosition() - network.averageEnergyPosition;
@@ -329,18 +329,6 @@
             }
 
             // C
-            // We check which nodes do have a confirmed energy distribution
-            // If one becomes confirmed, then push its energy to the targetNode
-            checkSuspectNodesIfEnergyDistributionCanBeConfirmed(network.nodes.slice());
-            function checkSuspectNodesIfEnergyDistributionCanBeConfirmed(suspectNodeList) {
-                while(suspectNodeList.length > 0) {
-                    var suspectNode = suspectNodeList.shift();
-                    
-                }
-                
-            }
-
-            // D
             // Now simply distribute the energy pushing (or pulling) evenly over all connected nodes
             // For example the 1st node has +10 energy and two connected nodes, then every connected node will receive 5 energy
             // Then we will do node two, three, etc etc

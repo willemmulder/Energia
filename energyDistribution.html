@@ -88,8 +88,8 @@
                         var diameter = node.signalRadius * 2;
                         var div = document.createElement("div");
                         div.classList.add('node');
-                        div.style.left = node.location.x * zoomFactor;
-                        div.style.top = node.location.y * zoomFactor;
+                        div.style.left = node.position.x * zoomFactor;
+                        div.style.top = node.position.y * zoomFactor;
                         container1.appendChild(div);
                             var circle = document.createElement("div");
                             circle.style.width = (diameter * zoomFactor) + "px";
@@ -108,7 +108,7 @@
                             var connection = node.nodeConnectionsById[nodeId];
                             // Only draw the positive flows
                             if (connection.energyDistributions.total == 0 || connection.energyDistributions.total > 0) {
-                                var line = createLine(node.location.x * zoomFactor, node.location.y * zoomFactor, connection.targetNode.location.x * zoomFactor, connection.targetNode.location.y * zoomFactor);
+                                var line = createLine(node.position.x * zoomFactor, node.position.y * zoomFactor, connection.targetNode.position.x * zoomFactor, connection.targetNode.position.y * zoomFactor);
                                 line.innerHTML = '<span style="padding-left: ' + (connection.distance * zoomFactor / 2) + 'px;">' + Math.round(connection.energyDistributions.total) + '</span>';
                                 line.classList.add('connection');
                                 container1.appendChild(line);
